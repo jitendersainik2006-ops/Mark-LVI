@@ -1,0 +1,27 @@
+# Caddyfile — Minimal, Secure Reverse Proxy for Meta OAuth Callback ONLY
+#
+# PURPOSE:
+# Routes ONLY the Meta OAuth redirect callback to J.A.R.V.I.S. on local port 8000.
+# ALL other routes (Dashboard UI, Chat, Settings, WebSocket, Files) are strictly BLOCKED (HTTP 403).
+# Automatically obtains and renews trusted Let's Encrypt / ZeroSSL TLS certificates.
+#
+# USAGE:
+# 1. Replace 'jarvis-oauth.yourdomain.com' with your actual owned domain or subdomain.
+# 2. Point DNS (A or CNAME record) to your public IP.
+# 3. Run: caddy run --config caddy_oauth_callback_only.Caddyfile
+
+jarvis-oauth.yourdomain.com {
+    # Allow ONLY the exact Meta OAuth callback path
+    handle /api/instagram/oauth/callback* {
+        reverse_proxy 127.0.0.1:8000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-Proto https
+        }
+    }
+
+    # Strictly block and reject all other traffic (Dashboard, Chat, Audio, API)
+    handle {
+        respond "Access Denied: J.A.R.V.I.S. local dashboard is private." 403
+    }
+}

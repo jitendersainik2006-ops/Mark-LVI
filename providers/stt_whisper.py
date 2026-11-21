@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import time
 from importlib.util import find_spec
 from typing import Optional
@@ -59,6 +60,55 @@ MODELS = ("tiny", "base", "small", "medium", "large-v3", "large-v3-turbo")
 # default for a voice assistant, where being fast matters more than catching a
 # rare proper noun. `small` is noticeably better and roughly twice the wait.
 DEFAULT_MODEL = "base"
+
+_HALLUCINATION_PATTERNS = (
+    re.compile(r"^(thank you|thanks)( very much)?( for watching)?[\.!\?]*$", re.I),
+    re.compile(r"^(please )?(like and )?subscribe( to (my|our) channel)?[\.!\?]*$", re.I),
+    re.compile(r"^subtitles?.*by.*$", re.I),
+    re.compile(r"^sous[- ]titres.*$", re.I),
+    re.compile(r"^we'?ll see you (next time|soon)[\.!\?]*$", re.I),
+    re.compile(r"^see you next time[\.!\?]*$", re.I),
+    re.compile(r"^bye[- ]?bye[\.!\?]*$", re.I),
+    re.compile(r".*視聴ありがとうございました.*", re.I),
+    re.compile(r".*ご視聴ありがとうございました.*", re.I),
+    re.compile(r".*시청해주셔서 감사합니다.*", re.I),
+    re.compile(r".*구독과 좋아요.*", re.I),
+    re.compile(r".*धन्यवाद.*", re.I),
+    re.compile(r".*देखने के लिए धन्यवाद.*", re.I),
+    re.compile(r".*लाइक और सब्सक्राइब.*", re.I),
+    re.compile(r"^(mbc|sbs|kbs) 뉴스.*$", re.I),
+    re.compile(r"^(laptop speech|in it|oh|ready\? ready\?)[\.!\?]*$", re.I),
+)
+
+
+def _is_hallucination(text: str) -> bool:
+    """True if text is a known Whisper silence/noise artifact or repetitive loop."""
+    clean = text.strip()
+    if not clean:
+        return True
+
+    # 1. Reject purely punctuation, symbols, or single-character noise
+    alnum = re.findall(r"[\w\u0900-\u097f]", clean)
+    if len(alnum) < 2:
+        return True
+
+    # 2. Known regex patterns
+    for pat in _HALLUCINATION_PATTERNS:
+        if pat.search(clean):
+            return True
+
+    # 3. Repetitive loops: "word word word" or "연기 연기 연기"
+    words = clean.split()
+    if len(words) >= 4:
+        counts: dict[str, int] = {}
+        for w in words:
+            w_norm = re.sub(r"[^\w\u0900-\u097f]", "", w.lower())
+            if w_norm:
+                counts[w_norm] = counts.get(w_norm, 0) + 1
+        if any(c / len(words) >= 0.55 for c in counts.values()):
+            return True
+
+    return False
 
 
 def _threads() -> int:
@@ -85,7 +135,20 @@ class WhisperSTT:
         self.language = (cfg.get("language") or "").strip()
         self.base_url = (cfg.get("base_url") or "").strip()
         self.api_key = (cfg.get("api_key") or "").strip()
-        self.download_root = (cfg.get("download_root") or "").strip() or None
+        d_root = (cfg.get("download_root") or "").strip()
+        if not d_root:
+            from pathlib import Path as _P
+            base_dir = _P(__file__).resolve().parent.parent
+            candidate_roots = [
+                base_dir.parent / "whisper_models",
+                base_dir / "whisper_models",
+                _P(os.environ.get("LOCALAPPDATA", "")) / "JARVIS-AI" / "whisper_models",
+            ]
+            for c in candidate_roots:
+                if c.is_dir():
+                    d_root = str(c)
+                    break
+        self.download_root = d_root or None
         self._model = None
         self._load_lock = asyncio.Lock()
         # Set by each recognition: the language Whisper heard, as a code like
@@ -134,72 +197,109 @@ class WhisperSTT:
                     f"{_threads()} threads)")
             return self._model
 
-    def _transcribe_blocking(self, samples) -> str:
+    def _transcribe_blocking(self, samples, req_lang: str = "") -> str:
+        # Pre-filter: verify minimum RMS audio energy (reject fan hiss and ambient silence)
+        import numpy as np
+        rms = float(np.sqrt(np.mean(samples * samples))) if samples.size > 0 else 0.0
+        if rms < 0.012:
+            return ""
+
         segments, info = self._model.transcribe(
             samples,
-            language=self.language or None,     # None = detect it
-            beam_size=1,          # greedy: a voice command is short and beam
-                                  # search costs multiples of the time for an
-                                  # accuracy gain that does not show up here
-            vad_filter=True,      # drops the silence a push-to-talk release
-                                  # leaves at both ends, which Whisper otherwise
-                                  # fills with an invented sentence
-            condition_on_previous_text=False,   # stops one bad transcript from
-                                                # steering every one after it
+            language=req_lang or self.language or None,     # None = detect it
+            beam_size=1,          # greedy: fast local command execution
+            vad_filter=True,      # drops leading/trailing silence
+            vad_parameters=dict(min_silence_duration_ms=400, speech_pad_ms=150),
+            no_speech_threshold=0.6,
+            log_prob_threshold=-1.0,
+            compression_ratio_threshold=2.4,
+            condition_on_previous_text=False,   # stops one bad transcript from steering future ones
+            initial_prompt="Hello Jarvis. Hey Jarvis. English and Hindi conversation.",
         )
-        # The work happens HERE — `segments` is a generator.
-        text = " ".join(s.text.strip() for s in segments).strip()
-        self._accept_language(
-            str(getattr(info, "language", "") or ""),
-            float(getattr(info, "language_probability", 0.0) or 0.0),
-            text,
-        )
+
+        valid_parts = []
+        for s in segments:
+            s_text = s.text.strip()
+            if not s_text:
+                continue
+            no_speech = float(getattr(s, "no_speech_prob", 0.0) or 0.0)
+            avg_logprob = float(getattr(s, "avg_logprob", 0.0) or 0.0)
+            comp_ratio = float(getattr(s, "compression_ratio", 1.0) or 1.0)
+
+            # Drop high probability silence or low-confidence gibberish
+            if no_speech > 0.60 or avg_logprob < -1.10 or comp_ratio > 2.4:
+                continue
+            if _is_hallucination(s_text):
+                continue
+            valid_parts.append(s_text)
+
+        text = " ".join(valid_parts).strip()
+        if not text or _is_hallucination(text):
+            return ""
+
+        # Language gating: pin/bias to English and Hindi; reject random foreign subtitles
+        det_lang = str(getattr(info, "language", "") or "").lower().strip()
+        det_prob = float(getattr(info, "language_probability", 0.0) or 0.0)
+        has_devanagari = any('\u0900' <= ch <= '\u097f' for ch in text)
+
+        if det_lang not in ("en", "hi"):
+            if has_devanagari:
+                det_lang = "hi"
+            elif not req_lang:
+                # Ambient noise hallucinating foreign languages (ja, ko, ur, ta, ar, etc.) -> drop cleanly
+                return ""
+
+        self._accept_language(det_lang, det_prob, text)
         return text
 
     # How sure Whisper has to be, and how much it has to have heard, before the
     # answer switches to another language.
-    #
-    # THIS EXISTS BECAUSE THE VOICE CHANGED ACCENT AT RANDOM.
-    #     Whisper reports a language for EVERY utterance and is confident about
-    #     all of them, including "ok", "hmm", "evet" and "thanks". One-word
-    #     replies carry almost no signal, so the guess lands on whatever the
-    #     phonemes resemble — and because tts_piper follows the reported code,
-    #     the assistant answered one turn in a Portuguese voice and the next in
-    #     an English one, with the user having done nothing.
-    #
-    #     `language_probability` was sitting on the same object and was being
-    #     thrown away. It is the whole fix: below the threshold the previous
-    #     language stands, because "I could not tell" should keep the voice
-    #     where it is rather than move it somewhere new.
-    #
-    #     The length rule catches the other half — a short utterance can score
-    #     high and still be a coin toss, since there is not enough audio to be
-    #     wrong about.
-    _LANG_MIN_CONFIDENCE = 0.65
-    _LANG_MIN_CHARS = 12
+    _LANG_MIN_CONFIDENCE = 0.50
+    _LANG_MIN_CHARS = 4
 
     def _accept_language(self, code: str, confidence: float, text: str) -> None:
-        """Update the language the voice follows — only on real evidence.
+        """Update the language the voice follows — on real evidence without sticky lock.
 
-        The FIRST detection is always taken, whatever it scores: at the start of
-        a session there is nothing to keep, and refusing to choose would leave
-        the assistant with no language at all.
+        The FIRST detection is always taken. Subsequent detections update if:
+        1. Script matches definitively (e.g. Devanagari script present -> 'hi').
+        2. English/Hinglish detection has moderate confidence (>= 0.50).
+        3. Clear switch with high confidence (>= 0.70) even for short words (>= 3 chars).
         """
         code = code.strip().lower()
         if not code:
             return
+
+        # Devanagari Unicode block (\u0900-\u097f) is definitively Hindi
+        has_devanagari = any('\u0900' <= ch <= '\u097f' for ch in text)
+        if has_devanagari:
+            code = "hi"
+            confidence = max(confidence, 0.95)
+
         if not self.detected_language:
             self.detected_language = code
             return
         if code == self.detected_language:
             return
-        if confidence >= self._LANG_MIN_CONFIDENCE and len(text) >= self._LANG_MIN_CHARS:
+
+        t_len = len(text.strip())
+        is_switch = False
+
+        if has_devanagari and code == "hi":
+            is_switch = True
+        elif confidence >= 0.70 and t_len >= 3:
+            is_switch = True
+        elif confidence >= self._LANG_MIN_CONFIDENCE and t_len >= self._LANG_MIN_CHARS:
+            is_switch = True
+        elif code in ("en", "hi") and t_len >= 6 and confidence >= 0.40:
+            is_switch = True
+
+        if is_switch:
             print(f"[STT] language {self.detected_language} -> {code} "
-                  f"({confidence:.0%}, {len(text)} chars)")
+                  f"({confidence:.0%}, {t_len} chars)")
             self.detected_language = code
-            return
-        print(f"[STT] ignoring language guess {code} ({confidence:.0%}, "
-              f"{len(text)} chars) - keeping {self.detected_language}")
+        else:
+            if t_len > 0 and confidence > 0.3:
+                print(f"[STT] keeping {self.detected_language} (guess {code} was {confidence:.0%})")
 
     # ── hosted ───────────────────────────────────────────────────────────────
     def _api_blocking(self, pcm: bytes, sample_rate: int) -> str:
@@ -231,22 +331,23 @@ class WhisperSTT:
                          language: str = "", log=None) -> str:
         if not pcm:
             return ""
-        # Whisper invents sentences out of silence — the well-known artefact
-        # where a fraction of a second of room tone becomes "Thank you." in
-        # whatever language it guessed. A quarter of a second is below anything
-        # a person says on purpose, so it is dropped before it can become one.
-        if audio.duration_s(pcm, sample_rate) < 0.25:
+        # Require minimum speech duration (>= 0.50s). Below this is a click, cough, or noise artifact.
+        if audio.duration_s(pcm, sample_rate) < 0.50:
             return ""
-        if language:
-            self.language = language
-
+        req_lang = language or self.language
         if self.backend == "api":
             return await asyncio.to_thread(self._api_blocking, pcm, sample_rate)
 
-        await self._ensure_model(log)
+        # Quick pre-filter: convert to float32 samples and check RMS before touching model
         samples = audio.to_float32(
             audio.resample(pcm, sample_rate, 16_000))    # Whisper is a 16 kHz model
-        return await asyncio.to_thread(self._transcribe_blocking, samples)
+        import numpy as np
+        rms = float(np.sqrt(np.mean(samples * samples))) if samples.size > 0 else 0.0
+        if rms < 0.012:
+            return ""
+
+        await self._ensure_model(log)
+        return await asyncio.to_thread(self._transcribe_blocking, samples, req_lang)
 
     async def warmup(self, log=None) -> None:
         """Load the model AND run one throwaway recognition, before the user

@@ -1,0 +1,3 @@
+@echo off
+echo Testing Ollama detection in batch...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$c = Get-NetTCPConnection -LocalPort 11434 -State Listen -ErrorAction SilentlyContinue; if ($c) { Write-Host '[JARVIS] Ollama server is already active on 127.0.0.1:11434.' } else { Write-Host '[JARVIS] Ollama not active' }"

@@ -688,3 +688,14 @@ def set_output_volume(percent: int, name: str = "") -> bool:
     except Exception as e:
         print(f"[Audio] could not set the output volume: {e}")
         return False
+
+
+def get_input_devices(refresh: bool = False) -> list[str]:
+    """Compatibility wrapper returning list of available input audio devices."""
+    return list_devices("input", refresh=refresh)
+
+
+def get_output_devices(refresh: bool = False) -> list[str]:
+    """Compatibility wrapper returning list of available output audio devices."""
+    return list_devices("output", refresh=refresh)
+

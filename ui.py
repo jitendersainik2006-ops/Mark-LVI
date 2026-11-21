@@ -1471,9 +1471,9 @@ class SetupOverlay(QWidget):
         self._sel(detected)
         layout.addSpacing(12)
 
-        init_btn = QPushButton("▸  INITIALISE SYSTEMS")
-        init_btn.setFont(QFont("Courier New", 10, QFont.Weight.Bold))
-        init_btn.setFixedHeight(36)
+        init_btn = QPushButton("▸  INITIALISE WITH GEMINI KEY")
+        init_btn.setFont(QFont("Courier New", 9, QFont.Weight.Bold))
+        init_btn.setFixedHeight(34)
         init_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         init_btn.setStyleSheet(f"""
             QPushButton {{
@@ -1486,6 +1486,22 @@ class SetupOverlay(QWidget):
         """)
         init_btn.clicked.connect(self._submit)
         layout.addWidget(init_btn)
+
+        local_btn = QPushButton("⚙  USE LOCAL OLLAMA (NO KEY / FREE)")
+        local_btn.setFont(QFont("Courier New", 9, QFont.Weight.Bold))
+        local_btn.setFixedHeight(34)
+        local_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        local_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {C.PRI_GHO}; color: {C.PRI};
+                border: 1px solid {C.PRI_DIM}; border-radius: 3px;
+            }}
+            QPushButton:hover {{
+                background: {C.BORDER}; border: 1px solid {C.PRI};
+            }}
+        """)
+        local_btn.clicked.connect(self._submit_local)
+        layout.addWidget(local_btn)
 
     def _sel(self, key: str):
         self._sel_os = key
@@ -1508,14 +1524,11 @@ class SetupOverlay(QWidget):
                     QPushButton:hover {{ color: {C.TEXT}; border: 1px solid {C.BORDER_B}; }}
                 """)
 
+    def _submit_local(self):
+        self.done.emit("", self._sel_os)
+
     def _submit(self):
         key = self._key_input.text().strip()
-        if not key:
-            self._key_input.setStyleSheet(
-                self._key_input.styleSheet() +
-                f" QLineEdit {{ border: 1px solid {C.RED}; }}"
-            )
-            return
         self.done.emit(key, self._sel_os)
 
 
@@ -3976,7 +3989,7 @@ class RemoteKeyOverlay(QWidget):
 
     closed = pyqtSignal()
 
-    _OW, _OH = 400, 465
+    _OW, _OH = 420, 520
 
     def __init__(self, url: str, key: str, auto_login_url: str = "",
                  manual_url: str = "", expiry_secs: int = 600, parent=None,
@@ -4081,16 +4094,17 @@ class RemoteKeyOverlay(QWidget):
         lay.addWidget(self._url_lbl)
 
         self._key_lbl = QLabel(key)
-        self._key_lbl.setFont(QFont("Courier New", 28, QFont.Weight.Bold))
+        self._key_lbl.setFont(QFont("Courier New", 24, QFont.Weight.Bold))
         self._key_lbl.setStyleSheet(f"""
             color: {C.ACC};
             background: {C.PANEL2};
             border: 1px solid {C.BORDER_B};
             border-radius: 8px;
-            padding: 6px 4px;
-            letter-spacing: 10px;
+            padding: 8px 6px;
+            letter-spacing: 6px;
         """)
         self._key_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._key_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         lay.addWidget(self._key_lbl)
 
         self._timer_lbl = QLabel()
@@ -4214,13 +4228,14 @@ class RemoteKeyOverlay(QWidget):
                 self._auto_login_url = auto
                 self._update_qr(auto or url)
                 self._expiry = time.time() + 600
+                self._key_lbl.setFont(QFont("Courier New", 24, QFont.Weight.Bold))
                 self._key_lbl.setStyleSheet(f"""
                     color: {C.ACC};
                     background: {C.PANEL2};
                     border: 1px solid {C.BORDER_B};
                     border-radius: 8px;
-                    padding: 6px 4px;
-                    letter-spacing: 10px;
+                    padding: 8px 6px;
+                    letter-spacing: 6px;
                 """)
                 self._timer_lbl.setStyleSheet(
                     f"color: {C.TEXT_MED}; background: transparent;"
@@ -6899,6 +6914,11 @@ class MainWindow(QMainWindow):
         if not API_FILE.exists(): return False
         try:
             d = json.loads(API_FILE.read_text(encoding="utf-8"))
+            providers = d.get("providers", {})
+            if isinstance(providers, dict) and providers.get("mode") == "pipeline":
+                pipe = providers.get("pipeline", {})
+                if isinstance(pipe, dict) and pipe.get("llm"):
+                    return True
             return bool(d.get("gemini_api_key")) and bool(d.get("os_system"))
         except Exception:
             return False
@@ -6906,7 +6926,7 @@ class MainWindow(QMainWindow):
     def _show_setup(self):
         ov = SetupOverlay(self.centralWidget())
         cw = self.centralWidget()
-        ow, oh = 460, 390
+        ow, oh = 460, 440
         ov.setGeometry(
             (cw.width()  - ow) // 2,
             (cw.height() - oh) // 2,
@@ -6918,8 +6938,42 @@ class MainWindow(QMainWindow):
 
     def _on_setup_done(self, key: str, os_name: str):
         os.makedirs(CONFIG_DIR, exist_ok=True)
+        data = _read_full_config()
+        data["os_system"] = os_name
+        data["gemini_api_key"] = key
+        if not key:
+            p = data.get("providers", {})
+            if not isinstance(p, dict):
+                p = {}
+            p["mode"] = "pipeline"
+            pipe = p.get("pipeline", {})
+            if not isinstance(pipe, dict):
+                pipe = {}
+            pipe.setdefault("llm", "openai_compat")
+            pipe.setdefault("stt", "")
+            pipe.setdefault("tts", "system_tts")
+            p["pipeline"] = pipe
+            creds = p.get("creds", {})
+            if not isinstance(creds, dict):
+                creds = {}
+            creds.setdefault("openai_compat", {
+                "base_url": "http://127.0.0.1:11434/v1",
+                "model": "qwen2.5:3b",
+                "api_key": "ollama",
+                "vision": False,
+                "max_tools": 14,
+                "max_tool_chars": 12000
+            })
+            creds.setdefault("system_tts", {
+                "voice": "Microsoft Zira Desktop",
+                "rate": 0
+            })
+            p["creds"] = creds
+            p["sidecar"] = "openai_compat"
+            p["sidecar_first"] = True
+            data["providers"] = p
         API_FILE.write_text(
-            json.dumps({"gemini_api_key": key, "os_system": os_name}, indent=4),
+            json.dumps(data, indent=4),
             encoding="utf-8",
         )
         self._ready = True
@@ -6927,8 +6981,9 @@ class MainWindow(QMainWindow):
             self._overlay.hide()
             self._overlay = None
         self._apply_state("LISTENING")
-        self._assistant_name = _read_full_config().get("assistant_name", "JARVIS") or "JARVIS"
-        self._log.append_log(f"SYS: Initialised. OS={os_name.upper()}. {self._assistant_name} online.")
+        self._assistant_name = data.get("assistant_name", "JARVIS") or "JARVIS"
+        mode_label = "Local Ollama" if not key else "Gemini Live"
+        self._log.append_log(f"SYS: Initialised. OS={os_name.upper()}. {self._assistant_name} online ({mode_label}).")
 
 
 class _RootShim:

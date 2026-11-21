@@ -1,0 +1,51 @@
+{
+  "github": {
+    "name": "GitHub",
+    "icon": "\ud83d\udc19",
+    "status": "NOT_CONFIGURED",
+    "api_endpoint": "https://api.github.com",
+    "access_token": "",
+    "target_repo": "FatihMakes/Mark-LVI",
+    "last_tested": null,
+    "error": null
+  },
+  "slack": {
+    "name": "Slack",
+    "icon": "\ud83d\udcac",
+    "status": "NOT_CONFIGURED",
+    "webhook_url": "",
+    "bot_token": "",
+    "channel": "#general",
+    "last_tested": null,
+    "error": null
+  },
+  "discord": {
+    "name": "Discord",
+    "icon": "\ud83c\udfae",
+    "status": "NOT_CONFIGURED",
+    "webhook_url": "",
+    "bot_token": "",
+    "channel_id": "",
+    "last_tested": null,
+    "error": null
+  },
+  "notion": {
+    "name": "Notion",
+    "icon": "\ud83d\udcd3",
+    "status": "NOT_CONFIGURED",
+    "api_key": "",
+    "database_id": "",
+    "last_tested": null,
+    "error": null
+  },
+  "webhooks": {
+    "name": "Custom Inbound & Outbound Webhooks",
+    "icon": "\ud83d\udd17",
+    "status": "NOT_CONFIGURED",
+    "inbound_url": "/api/n8n/webhook",
+    "outbound_url": "",
+    "auth_header": "",
+    "last_tested": null,
+    "error": null
+  }
+}

@@ -36,6 +36,15 @@ def save_api_keys(gemini_api_key: str) -> None:
 
 def load_api_keys() -> dict:
     if not CONFIG_FILE.exists():
+        template_file = CONFIG_DIR / "api_keys.template.json"
+        if template_file.exists():
+            try:
+                import shutil
+                ensure_config_dir()
+                shutil.copy(template_file, CONFIG_FILE)
+            except Exception:
+                pass
+    if not CONFIG_FILE.exists():
         return {}
     try:
         return json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
@@ -48,7 +57,16 @@ def get_gemini_key() -> str | None:
 
 def is_configured() -> bool:
     key = get_gemini_key()
-    return bool(key and len(key) > 15)
+    if bool(key and len(key) > 15):
+        return True
+    try:
+        if get_provider_mode() == "pipeline":
+            pipe = get_pipeline()
+            if pipe.get("llm"):
+                return True
+    except Exception:
+        pass
+    return False
 
 
 def get_assistant_name() -> str:
@@ -279,6 +297,37 @@ def save_brief_enabled(enabled: bool) -> None:
             data = {}
     data["morning_brief_enabled"] = enabled
     CONFIG_FILE.write_text(json.dumps(data, indent=4), encoding="utf-8")
+
+
+def get_memory_enabled() -> bool:
+    """Whether long-term memory storage and prompt injection are active."""
+    return bool(load_api_keys().get("memory_enabled", True))
+
+
+def save_memory_enabled(enabled: bool) -> None:
+    _save_flag("memory_enabled", bool(enabled))
+
+
+def get_auto_create_memory() -> bool:
+    """Whether automatic extraction of memories from chat conversation is active."""
+    return bool(load_api_keys().get("auto_create_memory", True))
+
+
+def save_auto_create_memory(enabled: bool) -> None:
+    _save_flag("auto_create_memory", bool(enabled))
+
+
+def get_memory_retention_days() -> int:
+    """Retention period in days for non-pinned memories (0 = indefinite)."""
+    try:
+        return int(load_api_keys().get("memory_retention_days", 0))
+    except (ValueError, TypeError):
+        return 0
+
+
+def save_memory_retention_days(days: int) -> None:
+    _save_flag("memory_retention_days", max(0, int(days)))
+
 
 
 # ── Audio devices ────────────────────────────────────────────────────────────

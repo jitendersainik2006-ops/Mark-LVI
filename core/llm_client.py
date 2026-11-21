@@ -41,7 +41,7 @@ CONFIG_PATH = BASE_DIR / "config" / "api_keys.json"
 
 _DEFAULTS = {
     "llm_url":      "http://localhost:11434",
-    "llm_model":    "llama3.2",
+    "llm_model":    "qwen2.5:3b",
     "llm_provider": "ollama",   # "ollama" | "openai"
 }
 
@@ -98,7 +98,15 @@ def ensure_ollama_running(timeout: int = 15) -> bool:
     if _is_up():
         return True
 
-    print("[LLM] Ollama not running — launching 'ollama serve'…")
+    print("[LLM] Ollama not running — launching 'ollama serve' via ollama_manager…")
+    try:
+        from core.ollama_manager import ollama_manager
+        ok, msg = ollama_manager.start_service(timeout=timeout)
+        print(f"[LLM] {msg}")
+        return ok
+    except Exception as e:
+        print(f"[LLM] Could not launch Ollama via manager: {e}")
+
     try:
         kwargs: dict = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
         if sys.platform == "win32":
@@ -120,6 +128,7 @@ def ensure_ollama_running(timeout: int = 15) -> bool:
 
     print("[LLM] Ollama did not respond within the timeout.")
     return False
+
 
 
 def warmup_model(system_prompt: str | None = None) -> bool:
@@ -326,6 +335,20 @@ def call_llm(
     except Exception as e:
         print(f"[LLM] Unexpected error: {type(e).__name__}: {e}")
         raise RuntimeError(f"LLM call failed: {e}")
+
+
+class LLMClient:
+    """Convenience class wrapper around call_llm for conversation engines and plugins."""
+    def __init__(self, model: str | None = None, timeout: int = 120):
+        self.model = model
+        self.timeout = timeout
+
+    def complete(self, messages: list, tools: list | None = None) -> tuple[str, list]:
+        """Runs completion and returns (content_text, tool_calls)."""
+        res = call_llm(messages, tools=tools, timeout=self.timeout)
+        content = res.get("content", "")
+        tool_calls = res.get("tool_calls", [])
+        return content, tool_calls
 
 
 def call_llm_text(

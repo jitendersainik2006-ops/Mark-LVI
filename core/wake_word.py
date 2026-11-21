@@ -21,13 +21,15 @@ import queue
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Callable
 
-# Pretrained openwakeword model that listens for "Hey Jarvis".
+# Pretrained openwakeword model that listens for "Hey Jarvis" and phonetic variants ("Hello Jarvis").
 WAKE_MODEL = "hey_jarvis"
-# Score in [0,1]; above this counts as a detection. Tunable per environment.
-DEFAULT_THRESHOLD = 0.5
+# Score in [0,1]; 0.35 allows robust detection for both "Hello Jarvis" and "Hey Jarvis"
+# across laptop microphone distances while preventing ambient false triggers.
+DEFAULT_THRESHOLD = 0.35
 # Mic frames arrive at 16 kHz int16; this is just the detector's input rate.
 SAMPLE_RATE = 16000
 
@@ -128,6 +130,7 @@ class WakeWordDetector:
         self._running = False
         self._model = None
         self._ready = False
+        self._last_detect_time = 0.0
 
     def start(self) -> bool:
         """Load the model and spawn the inference thread. Returns True on success.
@@ -146,7 +149,7 @@ class WakeWordDetector:
         self._ready = True
         self._thread = threading.Thread(target=self._loop, daemon=True, name="WakeWordThread")
         self._thread.start()
-        self._logger("Wake word: listening for 'Hey Jarvis'.")
+        self._logger("Wake word: listening for 'Hello Jarvis' or 'Hey Jarvis'.")
         return True
 
     def stop(self) -> None:
@@ -181,10 +184,22 @@ class WakeWordDetector:
         import numpy as np
         while self._running:
             try:
-                frame = self._queue.get()
+                try:
+                    frame = self._queue.get(timeout=0.2)
+                except queue.Empty:
+                    continue
                 if frame is None or not self._running:
                     break
-                scores = self._model.predict(np.asarray(frame, dtype=np.int16))
+                # Apply gentle software gain if frame contains speech but is quiet
+                f_float = np.asarray(frame, dtype=np.float32)
+                rms = float(np.sqrt(np.mean(f_float ** 2))) if f_float.size > 0 else 0.0
+                if 80.0 < rms < 3500.0:
+                    scale = min(2.5, 3500.0 / max(rms, 1.0))
+                    f_boosted = np.clip(f_float * scale, -32768, 32767).astype(np.int16)
+                    scores = self._model.predict(f_boosted)
+                else:
+                    scores = self._model.predict(np.asarray(frame, dtype=np.int16))
+
                 score = 0.0
                 if isinstance(scores, dict):
                     # match the jarvis model regardless of exact key suffix
@@ -194,12 +209,17 @@ class WakeWordDetector:
                     if score == 0.0 and scores:
                         score = max(float(v) for v in scores.values())
                 if score >= self._threshold:
-                    # drain any backlog so we don't double-fire on the same utterance
-                    self._drain()
-                    try:
-                        self._on_detect()
-                    except Exception as e:
-                        self._logger(f"Wake word: on_detect error — {e}")
+                    now = time.monotonic()
+                    if (now - self._last_detect_time) >= 2.5:
+                        self._last_detect_time = now
+                        self._logger(f"Wake word detected ('Hello/Hey Jarvis', score: {score:.2f})")
+                        self._drain()
+                        try:
+                            self._on_detect()
+                        except Exception as e:
+                            self._logger(f"Wake word: on_detect error — {e}")
+                    else:
+                        self._drain()
             except Exception as e:
                 self._logger(f"Wake word: inference error — {e}")
 

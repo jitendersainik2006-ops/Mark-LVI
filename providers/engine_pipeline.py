@@ -78,11 +78,11 @@ _DEFAULT_HISTORY_CHARS = 24_000
 # floor is measured continuously from the quietest recent frames and speech is
 # whatever stands well above it.
 _VAD_SILENCE_MS = 700      # quiet for this long after speech = the turn ended
-_VAD_MIN_SPEECH_MS = 250   # shorter than this is a cough, a click, a door
+_VAD_MIN_SPEECH_MS = 400   # shorter than this is a cough, a click, or noise pop
 _VAD_MAX_TURN_S = 30.0     # a runaway stream is flushed rather than kept for ever
 _VAD_FLOOR_MARGIN = 3.5    # speech is this many times the measured noise floor
-_VAD_ABSOLUTE_MIN = 0.006  # ...and never below this, so a silent room's own
-                           # floor of near-zero cannot make hiss into speech
+_VAD_ABSOLUTE_MIN = 0.018  # ...and never below this (~590 in int16 PCM), so ambient
+                           # room fan noise cannot make hiss into speech
 
 # ── Stopping a model that will not stop ──────────────────────────────────────
 # Gemini Live ends a turn itself. A chat API does not: every tool result is a
@@ -220,8 +220,34 @@ class PipelineEngine:
 
     # ── history ──────────────────────────────────────────────────────────────
     def _messages(self) -> list[dict]:
-        msgs = [{"role": "system", "content": self._system}] if self._system else []
-        return msgs + self._trimmed()
+        sys_content = self._system or ""
+        trimmed = self._trimmed()
+        try:
+            from core.knowledge_manager import knowledge_manager
+            latest_text = self._latest_user_text()
+            if latest_text and knowledge_manager.is_enabled():
+                k_ctx = knowledge_manager.format_knowledge_context(latest_text)
+                if k_ctx:
+                    sys_content = (sys_content + "\n\n" + k_ctx).strip()
+
+                    # Also inject into the active user turn in trimmed history for direct local LLM attention
+                    if trimmed and trimmed[-1].get("role") == "user":
+                        last_msg = dict(trimmed[-1])
+                        orig_content = last_msg.get("content", "")
+                        if isinstance(orig_content, str) and "<<<VERIFIED_HUMAN_KNOWLEDGE>>>" not in orig_content:
+                            matches = knowledge_manager.search(latest_text, top_k=3, min_score=0.6)
+                            if matches:
+                                k_lines = ["<<<VERIFIED_HUMAN_KNOWLEDGE>>>"]
+                                for m in matches:
+                                    k_lines.append(f"[Source: {m['source_title']}, Section: {m['section']}, v{m['version']}]\n{m['text']}")
+                                k_lines.append("<<<END_VERIFIED_HUMAN_KNOWLEDGE>>>")
+                                k_block = "\n".join(k_lines)
+                                last_msg["content"] = f"{k_block}\n\n{orig_content}"
+                                trimmed = trimmed[:-1] + [last_msg]
+        except Exception as e:
+            print(f"[PipelineEngine] Knowledge retrieval note: {e}")
+        msgs = [{"role": "system", "content": sys_content}] if sys_content else []
+        return msgs + trimmed
 
     def _trimmed(self) -> list[dict]:
         """The tail of the conversation that fits the budget.
@@ -439,6 +465,58 @@ class PipelineEngine:
             self._gen.cancel()
         self._gen = asyncio.create_task(self._generate())
 
+    def _latest_user_text(self) -> str:
+        for msg in reversed(self._history):
+            if msg.get("role") == "user":
+                c = msg.get("content", "")
+                if isinstance(c, str):
+                    return c
+                if isinstance(c, list):
+                    texts = [p.get("text", "") for p in c if isinstance(p, dict) and p.get("text")]
+                    return " ".join(texts)
+        return ""
+
+    def _should_use_tools(self, prompt: str) -> bool:
+        if not prompt or not self._tools:
+            return False
+        p = prompt.strip().lower()
+
+        action_patterns = [
+            r"\b(open|launch|start|run|kholo|chalao)\b",
+            r"\b(close|kill|quit|exit|shutdown|restart|lock|sleep|band karo|rok do)\b",
+            r"\b(volume|mute|unmute|brightness|wifi|bluetooth|sound|audio|awaz)\b",
+            r"\b(screen|screenshot|display|camera|webcam|capture|dekho)\b",
+            r"\b(cpu|ram|gpu|temperature|temp|battery|storage|disk|system status|hardware|status)\b",
+            r"\b(file|folder|directory|save file|delete file)\b",
+            r"\b(search (google|web|internet)|google for|browse to|open website|internet par dhoondo)\b",
+            r"\b(play (video|music|song|youtube)|gana chalao)\b",
+            r"\b(remember (that|my)|save memory|remind me|set (reminder|timer|alarm)|yaad rakhna|yaad dila do)\b",
+            r"\b(what do you remember|meri details|meri memory|recall|my favorite|my preferences|who am i|mera naam)\b",
+            r"\b(task|tasks|schedule|cancel task|retry task|approve task|pending tasks|active tasks|background task)\b",
+            r"\b(reel|reels|instagram|trading reel|post reel|publish reel|video preview|create reel)\b",
+            r"\b(knowledge|docs|document|documents|guide|manual|notes|reference|teach|learn|search knowledge)\b",
+        ]
+
+        knowledge_patterns = [
+            r"\b(explain|samjhao|what is|kya hai|tell me about|batao|define|meaning of|matlab)\b",
+            r"\b(write a (python|code|function|script|program)|code for|program that)\b",
+            r"\b(how (does|to|do)|kaise (kaam|karta|kare)|why (is|do|does)|kyun)\b",
+            r"\b(photosynthesis|science|biology|physics|chemistry|history|math|calculate)\b",
+            r"\b(translate|hindi mein|english mein|summary|summarize)\b",
+            r"\b(hello|hi|hey|namaste|good morning|how are you|kya haal hai|who are you)\b",
+        ]
+
+        is_knowledge = any(re.search(pat, p) for pat in knowledge_patterns)
+        is_action = any(re.search(pat, p) for pat in action_patterns)
+
+        if is_action and not is_knowledge:
+            return True
+        if is_action and is_knowledge:
+            if any(w in p for w in ["my ", "mera ", "meri ", "favorite", "favourite", "task", "status", "reel", "instagram", "knowledge", "doc", "notes", "manual", "guide", "cpu", "ram", "gpu", "temp", "battery", "storage", "disk", "open", "launch", "close", "mute", "set"]):
+                return True
+            return False
+        return False
+
     async def _generate(self) -> None:
         said: list[str] = []
         calls: list[FunctionCall] = []
@@ -446,12 +524,22 @@ class PipelineEngine:
         first_word = None
         thinking = _ReasoningFilter()
         pending = ""            # visible text not yet a whole sentence
+
+        # For small local models, avoid drowning the context with tool declarations
+        # on ordinary conversational, knowledge, or coding queries. Keep tools for action requests.
+        tools_to_use = self._tools
+        is_tool_round = bool(self._history and self._history[-1].get("role") == "tool")
+        if tools_to_use and not is_tool_round and not self._should_use_tools(self._latest_user_text()):
+            tools_to_use = None
+
         try:
-            async for ev in self._llm.chat(self._messages(), self._tools):
+            async for ev in self._llm.chat(self._messages(), tools_to_use):
                 if ev.get("text"):
                     visible = thinking.feed(ev["text"])
                     if visible and first_word is None:
                         first_word = time.monotonic() - t0
+                        # Immediately inform the receive loop that the model is answering
+                        await self._emit(Msg.said(""))
                     pending += visible
                     # Emit and speak a SENTENCE at a time — never a fragment.
                     #
@@ -496,17 +584,22 @@ class PipelineEngine:
                 # application is never launched twice — which is the difference
                 # between a wasted round trip and four copies of WhatsApp.
                 fresh, repeats = [], []
+                seen_signatures = set()
                 for c in calls:
-                    if _signature(c) in self._done_calls:
+                    sig = _signature(c)
+                    if sig in self._done_calls or sig in seen_signatures:
                         repeats.append(c)
                     else:
                         fresh.append(c)
+                        seen_signatures.add(sig)
 
                 if repeats:
                     names = ", ".join(sorted({c.name for c in repeats}))
                     self._log(f"SYS: {names} was already done this turn - "
                               f"reusing the result instead of running it again.")
                     for c in repeats:
+                        sig = _signature(c)
+                        cached_result = self._done_calls.get(sig, "Done.")
                         self._history.append({
                             "role": "assistant", "content": None,
                             "tool_calls": [{"id": c.id, "type": "function",
@@ -514,7 +607,7 @@ class PipelineEngine:
                                                          "arguments": json.dumps(c.args)}}]})
                         self._history.append({
                             "role": "tool", "tool_call_id": c.id, "name": c.name,
-                            "content": self._done_calls[_signature(c)]})
+                            "content": cached_result})
 
                 if self._rounds > _MAX_TOOL_ROUNDS:
                     # Wandering rather than converging. Stop asking for tools
@@ -622,7 +715,11 @@ class PipelineEngine:
             # in a way that cost real time: with a broken voice the assistant
             # reported "I could not reach the model", which sent the search to
             # the language model — the one part that was working.
-            self._report("the voice", self._tts, e)
+            err_msg = str(e)
+            if "does not cover this script" in err_msg or "produced no audio" in err_msg:
+                self._log("SYS: Voice does not support this language script — displaying text answer.")
+            else:
+                self._report("the voice", self._tts, e)
             return
 
         # Accumulated rather than assigned: a turn that calls a tool speaks
@@ -764,7 +861,21 @@ class PipelineEngine:
         pcm, self._mic, self._mic_bytes = b"".join(self._mic), [], 0
         from . import audio as _a
 
-        self._timing = {"heard_s": _a.duration_s(pcm, sample_rate)}
+        # 1. Enforce minimum speech duration (>= 0.50s) to reject clicks/clatter
+        dur = _a.duration_s(pcm, sample_rate)
+        if dur < 0.50:
+            self._reset_vad()
+            return ""
+
+        # 2. Enforce minimum RMS energy (reject quiet ambient room tone and fan hum)
+        samples = _a.to_float32(pcm)
+        import numpy as np
+        rms = float(np.sqrt(np.mean(samples * samples))) if samples.size > 0 else 0.0
+        if rms < 0.012:
+            self._reset_vad()
+            return ""
+
+        self._timing = {"heard_s": dur}
         t0 = time.monotonic()
         try:
             text = (await self._stt.transcribe(pcm, sample_rate)).strip()
@@ -772,6 +883,31 @@ class PipelineEngine:
             self._report("speech recognition", self._stt, e)
             return ""
         self._timing["stt"] = time.monotonic() - t0
+
+        if not text:
+            return ""
+
+        # 3. Reject noise tokens or single characters (unless clear short words like 'ok', 'no')
+        alnum = [c for c in text if c.isalnum()]
+        if len(alnum) < 2:
+            return ""
+
+        # 4. Duplicate transcription protection (prevent re-submitting identical text within 12 seconds)
+        now = time.monotonic()
+        if not hasattr(self, "_recent_transcriptions"):
+            self._recent_transcriptions = []
+        self._recent_transcriptions = [
+            (t, ts) for (t, ts) in self._recent_transcriptions
+            if (now - ts) < 15.0
+        ]
+        norm_text = text.lower().strip()
+        for prev_text, prev_ts in self._recent_transcriptions:
+            if prev_text == norm_text and (now - prev_ts) < 12.0:
+                print(f"[Pipeline] Duplicate transcription blocked: '{text}'")
+                return ""
+
+        self._recent_transcriptions.append((norm_text, now))
+
         if text:
             # THIS is what the user said, and the only thing that should reach
             # the activity log as "You:". Emitted here rather than in
@@ -928,6 +1064,23 @@ _UNSPEAKABLE = re.compile(
     "]+", flags=re.UNICODE)
 
 
+def _normalize_args(name: str, args: Any) -> Any:
+    if not isinstance(args, dict):
+        return args
+    norm = {}
+    for k, v in args.items():
+        if isinstance(v, str):
+            norm[k] = " ".join(v.strip().split())
+        else:
+            norm[k] = v
+    if name == "web_search":
+        if "mode" not in norm:
+            norm["mode"] = "search"
+        if "query" in norm and isinstance(norm["query"], str):
+            norm["query"] = norm["query"].lower()
+    return norm
+
+
 def _signature(call) -> str:
     """What makes two tool calls the same request.
 
@@ -936,7 +1089,8 @@ def _signature(call) -> str:
     model issues a fresh id every time it repeats itself, which is exactly the
     case this exists to catch."""
     try:
-        args = json.dumps(call.args or {}, sort_keys=True, ensure_ascii=False)
+        norm = _normalize_args(getattr(call, "name", ""), getattr(call, "args", {}) or {})
+        args = json.dumps(norm, sort_keys=True, ensure_ascii=False)
     except Exception:
         args = str(getattr(call, "args", ""))
     return f"{call.name}({args})"

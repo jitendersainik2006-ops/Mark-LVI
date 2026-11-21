@@ -84,6 +84,54 @@ _SENTENCE_END = re.compile(r"(?<=[.!?…])\s+|(?<=[。！？؟۔।])\s*")
 # Windows only: keep a console window from flashing open on every sentence.
 _NO_WINDOW = 0x08000000 if _SYS == "Windows" else 0
 
+_DEVA_CONSONANTS = {
+    'क': 'k', 'ख': 'kh', 'ग': 'g', 'घ': 'gh', 'ङ': 'ng',
+    'च': 'ch', 'छ': 'chh', 'ज': 'j', 'झ': 'jh', 'ञ': 'ny',
+    'ट': 't', 'ठ': 'th', 'ड': 'd', 'ढ': 'dh', 'ण': 'n',
+    'त': 't', 'थ': 'th', 'द': 'd', 'ध': 'dh', 'न': 'n',
+    'प': 'p', 'फ': 'ph', 'ब': 'b', 'भ': 'bh', 'म': 'm',
+    'य': 'y', 'र': 'r', 'ल': 'l', 'व': 'v', 'श': 'sh',
+    'ष': 'sh', 'स': 's', 'ह': 'h', 'क़': 'q', 'ख़': 'kh',
+    'ग़': 'gh', 'ज़': 'z', 'ड़': 'r', 'ढ़': 'rh', 'फ़': 'f',
+}
+_DEVA_VOWELS = {
+    'अ': 'a', 'आ': 'aa', 'इ': 'i', 'ई': 'ee', 'उ': 'u',
+    'ऊ': 'oo', 'ऋ': 'ri', 'ए': 'e', 'ऐ': 'ai', 'ओ': 'o', 'औ': 'au',
+}
+_DEVA_MATRAS = {
+    'ा': 'aa', 'ि': 'i', 'ी': 'ee', 'ु': 'u', 'ू': 'oo',
+    'ृ': 'ri', 'े': 'e', 'ै': 'ai', 'ो': 'o', 'ौ': 'au',
+    '्': '', 'ं': 'n', 'ँ': 'n', 'ः': 'h',
+}
+
+def _devanagari_to_roman(text: str) -> str:
+    """Phonetic transliteration of Devanagari Hindi text to Roman Latin script so installed English/Latin voices can pronounce Hindi fluently."""
+    PUNCT_SPACES = set(" \t\n\r.,!?:;\"'()[]{}|।-")
+    res = []
+    i = 0
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c in _DEVA_VOWELS:
+            res.append(_DEVA_VOWELS[c])
+        elif c in _DEVA_CONSONANTS:
+            if i + 1 < n and text[i + 1] in _DEVA_MATRAS:
+                res.append(_DEVA_CONSONANTS[c] + _DEVA_MATRAS[text[i + 1]])
+                i += 1
+            elif i + 1 >= n or text[i + 1] in PUNCT_SPACES:
+                # Word-final consonant: suppress inherent 'a' (Hindi schwa deletion)
+                res.append(_DEVA_CONSONANTS[c])
+            else:
+                res.append(_DEVA_CONSONANTS[c] + 'a')
+        elif c in _DEVA_MATRAS:
+            res.append(_DEVA_MATRAS[c])
+        elif c in ('।', '॥'):
+            res.append('.')
+        else:
+            res.append(c)
+        i += 1
+    return ''.join(res)
+
 
 def _run(args: list[str], timeout: float = 60.0,
          stdin_data: Optional[bytes] = None) -> subprocess.CompletedProcess:
@@ -165,6 +213,17 @@ def list_voices(refresh: bool = False) -> list[str]:
 def _read_voices() -> list[str]:
     try:
         if _SYS == "Windows":
+            try:
+                import win32com.client
+                cat = win32com.client.Dispatch('SAPI.SpObjectTokenCategory')
+                cat.SetId(r'HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Voices', False)
+                tokens = cat.EnumerateTokens()
+                voices = [tokens.Item(i).GetDescription() for i in range(tokens.Count)]
+                if voices:
+                    return voices
+            except Exception:
+                pass
+
             ps = _powershell()
             if not ps:
                 return []
@@ -293,8 +352,51 @@ class SystemTTS:
         txt = os.path.join(td, "say.txt")
         wav = os.path.join(td, "say.wav")
         try:
+            # If text contains Devanagari script, transliterate it to Roman phonetics
+            # so installed English/Latin voices (like Microsoft Zira) can pronounce Hindi fluently.
+            has_devanagari = any('\u0900' <= ch <= '\u097F' for ch in text)
+            speak_text = _devanagari_to_roman(text) if has_devanagari else text
+            # Clean markdown and formatting noise before sending to SAPI
+            speak_text = re.sub(r"[\*#_`~]", " ", speak_text)
+            speak_text = re.sub(r"\s+", " ", speak_text).strip()
+
+            if _SYS == "Windows":
+                try:
+                    import win32com.client
+                    cat = win32com.client.Dispatch('SAPI.SpObjectTokenCategory')
+                    cat.SetId(r'HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Voices', False)
+                    tokens = cat.EnumerateTokens()
+                    token = None
+                    for i in range(tokens.Count):
+                        t = tokens.Item(i)
+                        desc = t.GetDescription().lower()
+                        if self.voice and self.voice.lower() in desc:
+                            token = t
+                            break
+                        if not token and "zira" in desc:
+                            token = t
+                    if not token and tokens.Count > 0:
+                        token = tokens.Item(0)
+
+                    v = win32com.client.Dispatch('SAPI.SpVoice')
+                    if token:
+                        v.Voice = token
+                    v.Rate = max(-10, min(10, self.rate))
+
+                    ms = win32com.client.Dispatch('SAPI.SpMemoryStream')
+                    fmt = win32com.client.Dispatch('SAPI.SpAudioFormat')
+                    fmt.Type = 30 # SAFT24kHz16BitMono matching audio.SPEAKER_RATE
+                    ms.Format = fmt
+                    v.AudioOutputStream = ms
+                    v.Speak(speak_text)
+                    raw_pcm = bytes(ms.GetData())
+                    if raw_pcm:
+                        return audio.to_wav(raw_pcm, rate=audio.SPEAKER_RATE)
+                except Exception:
+                    pass
+
             with open(txt, "w", encoding="utf-8") as f:
-                f.write(text)
+                f.write(speak_text)
             if _SYS == "Windows":
                 self._windows(txt, wav)
             elif _SYS == "Darwin":

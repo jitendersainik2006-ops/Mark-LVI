@@ -1,0 +1,38 @@
+# J.A.R.V.I.S. Mark LVI Core — Cloudflare Named Tunnel Configuration (Prepared / Ready)
+#
+# Intended tunnel name : jarvis-reels-tunnel
+# Intended hostname    : jarvis.theblackintel.com
+# Allowed callback     : /api/instagram/oauth/callback
+# Local ingress target : http://127.0.0.1:8005 (Hardened OAuth Callback Proxy ONLY)
+#
+# SECURITY GUARANTEES:
+# 1. Port 8000 (J.A.R.V.I.S. dashboard/backend) is NEVER referenced or exposed.
+# 2. Only /api/instagram/oauth/callback on jarvis.theblackintel.com is routed to 127.0.0.1:8005.
+# 3. All other paths and hostnames hit the final catch-all http_status:404 rule at cloudflared,
+#    and port 8005 independently enforces 403 Forbidden for any non-callback path.
+#
+# ACTIVATION PREREQUISITES (DO NOT RUN UNTIL READY):
+# 1. theblackintel.com Cloudflare zone must be Active (nameservers switched by authorized admin).
+# 2. Authenticate cloudflared with Cloudflare (places cert.pem under D:\JARVIS-AI\cloudflared\cert.pem
+#    or %USERPROFILE%\.cloudflared\cert.pem).
+# 3. Create tunnel once:
+#      D:\JARVIS-AI\tools\cloudflared.exe --origincert D:\JARVIS-AI\cloudflared\cert.pem tunnel create --cred-file D:\JARVIS-AI\cloudflared\jarvis-reels-tunnel.json jarvis-reels-tunnel
+# 4. Route DNS once zone is Active:
+#      D:\JARVIS-AI\tools\cloudflared.exe --origincert D:\JARVIS-AI\cloudflared\cert.pem tunnel route dns jarvis-reels-tunnel jarvis.theblackintel.com
+# 5. Validate & run:
+#      D:\JARVIS-AI\tools\cloudflared.exe tunnel ingress validate --config D:\JARVIS-AI\mark_lvi_core\config\cloudflared_named_tunnel.yml
+#      D:\JARVIS-AI\tools\cloudflared.exe tunnel --config D:\JARVIS-AI\mark_lvi_core\config\cloudflared_named_tunnel.yml run jarvis-reels-tunnel
+
+tunnel: jarvis-reels-tunnel
+credentials-file: D:\JARVIS-AI\cloudflared\jarvis-reels-tunnel.json
+logfile: D:\JARVIS-AI\mark_lvi_core\data\cloudflared_named_tunnel.log
+loglevel: info
+
+ingress:
+  - hostname: jarvis.theblackintel.com
+    path: ^/api/instagram/oauth/callback/?$
+    service: http://127.0.0.1:8005
+    originRequest:
+      noTLSVerify: false
+      connectTimeout: 10s
+  - service: http_status:404

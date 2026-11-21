@@ -97,7 +97,7 @@ PRESETS: dict[str, str] = {
 # Cloud entries get none of this: they process prompts on hardware where it does
 # not show, and taking tools away from a capable model would be a loss for no
 # gain. Anybody can change or clear it under MORE.
-_LOCAL_BUDGET = {"max_tools": "14", "max_tool_chars": "12000"}
+_LOCAL_BUDGET = {"max_tools": "18", "max_tool_chars": "16000"}
 
 CATALOG = (
     {"id": "ollama",     "label": "Ollama",

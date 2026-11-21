@@ -1,0 +1,50 @@
+{
+  "assistant_name": "JARVIS",
+  "user_name": "Sir",
+  "os_system": "windows",
+  "gemini_api_key": "",
+  "wake_word_enabled": true,
+  "language_mode": "hinglish",
+  "input_device": "",
+  "output_device": "",
+  "llm_provider": "ollama",
+  "llm_model": "qwen2.5:3b",
+  "llm_url": "http://127.0.0.1:11434",
+  "providers": {
+    "mode": "pipeline",
+    "pipeline": {
+      "stt": "whisper",
+      "llm": "openai_compat",
+      "tts": "system_tts"
+    },
+    "creds": {
+      "whisper": {
+        "backend": "local",
+        "model": "base",
+        "device": "cpu"
+      },
+      "openai_compat": {
+        "base_url": "http://127.0.0.1:11434/v1",
+        "model": "qwen2.5:3b",
+        "vision": "",
+        "vision_model": "qwen2.5:3b"
+      },
+      "system_tts": {
+        "voice": "Microsoft Zira Desktop",
+        "rate": "0"
+      }
+    }
+  },
+  "memory_enabled": true,
+  "ui_color": "#00f4ff",
+  "meta_app": {
+    "app_id": "",
+    "app_secret": "",
+    "config_id": "",
+    "business_portfolio": "",
+    "redirect_uri": "",
+    "graph_api_version": "v26.0"
+  },
+  "lan_pairing_enabled": false,
+  "auto_create_memory": true
+}
