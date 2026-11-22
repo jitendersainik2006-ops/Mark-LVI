@@ -2071,6 +2071,13 @@ class DashboardServer:
                 "charging": batt.power_plugged if batt else None,
             }
             
+            state_info = {}
+            try:
+                from core.assistant_state import assistant_state_manager
+                state_info = assistant_state_manager.get_state()
+            except Exception:
+                pass
+
             return JSONResponse({
                 "ok": True,
                 "online": True,
@@ -2081,6 +2088,9 @@ class DashboardServer:
                 "battery": batt_info,
                 "hostname": socket.gethostname(),
                 "platform": sys.platform,
+                "assistant_state": state_info.get("state", "IDLE"),
+                "active_task": state_info.get("active_task", ""),
+                "is_muted": state_info.get("is_muted", False),
             })
 
         @app.get("/api/system/heartbeat")
@@ -2709,7 +2719,43 @@ class DashboardServer:
                 return JSONResponse({"error": "Unauthorized"}, status_code=401)
             body = await req.json() if req.headers.get("content-length", "0") != "0" else {}
             muted = bool(body.get("muted", True))
+            try:
+                from core.assistant_state import assistant_state_manager
+                assistant_state_manager.set_muted(muted)
+            except Exception:
+                pass
             return JSONResponse({"ok": True, "muted": muted})
+
+        @app.get("/api/assistant/state")
+        async def get_assistant_state_ep(req: Request):
+            """Returns live assistant state for dashboard, companion widget, and telemetry."""
+            if not _auth(req):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            try:
+                from core.assistant_state import assistant_state_manager
+                return JSONResponse(assistant_state_manager.get_state())
+            except Exception as e:
+                return JSONResponse({"ok": True, "state": "IDLE", "active_task": "", "error": str(e)})
+
+        @app.post("/api/assistant/state")
+        async def set_assistant_state_ep(req: Request):
+            """Updates live assistant state from UI, voice engine, or PC agent."""
+            if not _auth(req):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            body = await req.json() if req.headers.get("content-length", "0") != "0" else {}
+            state = body.get("state", "IDLE")
+            task = body.get("active_task")
+            plan_id = body.get("plan_id")
+            audio_level = body.get("audio_level")
+            try:
+                from core.assistant_state import assistant_state_manager
+                if audio_level is not None:
+                    assistant_state_manager.set_audio_level(float(audio_level))
+                res = assistant_state_manager.set_state(state, active_task=task, plan_id=plan_id)
+                return JSONResponse(res)
+            except Exception as e:
+                return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
 
         # ── Central Skill Registry & Voice Intent Endpoints ───────────────────
 

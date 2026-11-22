@@ -3,19 +3,28 @@ core/floating_companion.py — J.A.R.V.I.S. Floating AI Desktop Companion Widget
 
 Provides a lightweight, draggable, borderless floating companion window inspired
 by modern desktop AI companions (Stonic / Cybernetic HUD):
-- States: IDLE, LISTENING, THINKING, SPEAKING, WORKING
+- States: IDLE, LISTENING, THINKING, SPEAKING, WORKING, MUTED, ERROR
 - Live audio reactivity: reactive energy ring and waveform particles
-- Draggable and dockable anywhere on the Windows screen
-- Right-click context menu: Push-to-Talk, Daily Briefing, Mute, Dashboard, Settings, Quit
-- Hotkey integration and state reflection
+- Draggable and dockable anywhere on the Windows screen with screen boundary clamping
+- Live IPC synchronization with DashboardServer on port 8000
+- Quick voice activation (double click or menu)
+- Microphone mute toggle
+- Active task indicator and emergency STOP button handler
+- Right-click context menu: Voice, Stop, Mute, Dashboard, Settings, Themes, Effects, Quit
 - Software rendered via PyQt6 (zero GPU/OpenGL requirements)
 """
 
 from __future__ import annotations
 
+import json
 import math
+import os
 import sys
-from typing import Optional
+import threading
+import urllib.error
+import urllib.request
+import webbrowser
+from typing import Any, Dict, Optional
 
 try:
     from PyQt6.QtCore import QPoint, QPointF, QRectF, QTimer, Qt
@@ -40,10 +49,12 @@ class FloatingCompanionWidget(QWidget if _PYQT_AVAILABLE else object):
 
     STATE_COLORS = {
         "IDLE": QColor(0, 244, 255) if _PYQT_AVAILABLE else "#00f4ff",       # Cyan
+        "STANDBY": QColor(0, 244, 255) if _PYQT_AVAILABLE else "#00f4ff",    # Cyan
         "LISTENING": QColor(0, 255, 128) if _PYQT_AVAILABLE else "#00ff80",  # Spring Green
         "THINKING": QColor(255, 200, 0) if _PYQT_AVAILABLE else "#ffc800",   # Amber
         "SPEAKING": QColor(255, 0, 180) if _PYQT_AVAILABLE else "#ff00b4",   # Neon Magenta
         "WORKING": QColor(255, 100, 0) if _PYQT_AVAILABLE else "#ff6400",    # Orange
+        "MUTED": QColor(239, 68, 68) if _PYQT_AVAILABLE else "#ef4444",      # Red
         "ERROR": QColor(255, 0, 51) if _PYQT_AVAILABLE else "#ff0033",       # Crimson Red
         "HAPPY": QColor(34, 211, 238) if _PYQT_AVAILABLE else "#22d3ee",
         "CHEERFUL": QColor(56, 189, 248) if _PYQT_AVAILABLE else "#38bdf8",
@@ -68,12 +79,16 @@ class FloatingCompanionWidget(QWidget if _PYQT_AVAILABLE else object):
         "CRIMSON": QColor(255, 42, 42) if _PYQT_AVAILABLE else "#ff2a2a",
     }
 
-    def __init__(self, parent=None, size: int = 140):
+    def __init__(self, parent=None, size: int = 140, server_url: Optional[str] = None):
         if not _PYQT_AVAILABLE:
             raise RuntimeError("PyQt6 is required for FloatingCompanionWidget.")
         super().__init__(parent)
         self.widget_size = size
+        self.server_url = server_url or os.environ.get("JARVIS_SERVER_URL", "http://127.0.0.1:8000")
         self.state = "IDLE"
+        self.active_task = ""
+        self.active_plan_id: Optional[str] = None
+        self.is_muted = False
         self.audio_level = 0.0
         self.phase = 0.0
         self.drag_position = QPoint()
@@ -90,6 +105,7 @@ class FloatingCompanionWidget(QWidget if _PYQT_AVAILABLE else object):
         self.animation_enabled = True
         self.intensity = 0.8
         self.current_emotion = "IDLE"
+        self._sync_in_progress = False
 
         # Window styling: Frameless, transparent background, always on top
         self._update_window_flags()
@@ -105,6 +121,11 @@ class FloatingCompanionWidget(QWidget if _PYQT_AVAILABLE else object):
         self.fullscreen_timer = QTimer(self)
         self.fullscreen_timer.timeout.connect(self._check_fullscreen_app)
         self.fullscreen_timer.start(1500)
+
+        # IPC state synchronization timer (every 500ms)
+        self.ipc_timer = QTimer(self)
+        self.ipc_timer.timeout.connect(self._sync_ipc_state)
+        self.ipc_timer.start(500)
 
     def _update_window_flags(self):
         flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.SubWindow
@@ -123,8 +144,9 @@ class FloatingCompanionWidget(QWidget if _PYQT_AVAILABLE else object):
         tn = str(theme_name).upper()
         if tn in self.THEMES:
             self.current_theme = tn
-            if self.state == "IDLE":
+            if self.state in ("IDLE", "STANDBY"):
                 self.STATE_COLORS["IDLE"] = self.THEMES[tn]
+                self.STATE_COLORS["STANDBY"] = self.THEMES[tn]
             self.update()
 
     def set_visual_effect(self, effect_name: str, enabled: bool):
@@ -156,7 +178,6 @@ class FloatingCompanionWidget(QWidget if _PYQT_AVAILABLE else object):
             screen_w = user32.GetSystemMetrics(0)
             screen_h = user32.GetSystemMetrics(1)
 
-            # Check if foreground window covers or exceeds the primary screen
             win_w = rect.right - rect.left
             win_h = rect.bottom - rect.top
             is_fullscreen = (win_w >= screen_w and win_h >= screen_h and rect.left <= 0 and rect.top <= 0)
@@ -200,15 +221,141 @@ class FloatingCompanionWidget(QWidget if _PYQT_AVAILABLE else object):
         self.intensity = max(0.0, min(1.0, float(intensity)))
         self.update()
 
-    def set_state(self, new_state: str):
+    def set_state(self, new_state: str, active_task: Optional[str] = None):
         st = str(new_state).upper()
         if st in self.STATE_COLORS:
             self.state = st
             self.current_emotion = st
+            if active_task is not None:
+                self.active_task = str(active_task)
             self.update()
 
     def set_audio_level(self, level: float):
         self.audio_level = max(0.0, min(1.0, float(level)))
+
+    def _sync_ipc_state(self):
+        """IPC synchronization hook called periodically to mirror assistant state."""
+        # 1. First attempt in-process state manager (fastest, zero network overhead)
+        try:
+            from core.assistant_state import assistant_state_manager
+            info = assistant_state_manager.get_state()
+            new_st = info.get("state", self.state)
+            task = info.get("active_task", "")
+            self.is_muted = info.get("is_muted", False)
+            if info.get("audio_level") is not None:
+                self.audio_level = float(info["audio_level"])
+            if new_st != self.state or task != self.active_task:
+                self.state = new_st
+                self.active_task = task
+                self.update()
+            return
+        except Exception:
+            pass
+
+        # 2. Standalone process: Non-blocking HTTP query to DashboardServer
+        if self._sync_in_progress:
+            return
+
+        def _fetch():
+            self._sync_in_progress = True
+            try:
+                url = f"{self.server_url}/api/assistant/state"
+                req = urllib.request.Request(url, headers={"User-Agent": "JARVIS-FloatingCompanion/56.1"})
+                with urllib.request.urlopen(req, timeout=0.8) as resp:
+                    if resp.status == 200:
+                        data = json.loads(resp.read().decode("utf-8"))
+                        st = data.get("state")
+                        task = data.get("active_task", "")
+                        muted = data.get("is_muted", False)
+                        if st and st in self.STATE_COLORS:
+                            self.state = st
+                            self.active_task = task
+                            self.is_muted = muted
+            except Exception:
+                pass
+            finally:
+                self._sync_in_progress = False
+
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def quick_voice_activation(self):
+        """Activates voice listening via IPC."""
+        self.set_state("LISTENING")
+
+        def _wake():
+            try:
+                from core.assistant_state import assistant_state_manager
+                assistant_state_manager.set_state("LISTENING")
+            except Exception:
+                pass
+            try:
+                url = f"{self.server_url}/api/action"
+                payload = json.dumps({"action": "wake"}).encode("utf-8")
+                req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+                with urllib.request.urlopen(req, timeout=1.5):
+                    pass
+            except Exception:
+                pass
+
+        threading.Thread(target=_wake, daemon=True).start()
+
+    def toggle_microphone_mute(self):
+        """Toggles hardware microphone mute status via IPC."""
+        self.is_muted = not self.is_muted
+        new_state = "MUTED" if self.is_muted else "IDLE"
+        self.set_state(new_state)
+
+        def _mute():
+            try:
+                from core.assistant_state import assistant_state_manager
+                assistant_state_manager.set_muted(self.is_muted)
+            except Exception:
+                pass
+            try:
+                url = f"{self.server_url}/api/voice/mute"
+                payload = json.dumps({"muted": self.is_muted}).encode("utf-8")
+                req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+                with urllib.request.urlopen(req, timeout=1.5):
+                    pass
+            except Exception:
+                pass
+
+        threading.Thread(target=_mute, daemon=True).start()
+
+    def stop_pc_agent(self):
+        """Emergency STOP: Immediately halts running Computer Agent workflows."""
+        self.set_state("IDLE")
+        self.active_task = ""
+
+        def _stop():
+            try:
+                from core.computer_agent import computer_agent
+                computer_agent.stop()
+            except Exception:
+                pass
+            try:
+                from core.assistant_state import assistant_state_manager
+                assistant_state_manager.set_state("IDLE", active_task="")
+            except Exception:
+                pass
+            try:
+                url = f"{self.server_url}/api/pc_agent/stop"
+                payload = json.dumps({}).encode("utf-8")
+                req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+                with urllib.request.urlopen(req, timeout=2.0):
+                    pass
+            except Exception:
+                pass
+
+        threading.Thread(target=_stop, daemon=True).start()
+
+    def open_dashboard(self, route: str = "/app"):
+        """Opens Dashboard URL in default system browser."""
+        target = f"{self.server_url}{route}"
+        try:
+            webbrowser.open(target)
+        except Exception as e:
+            print(f"[Companion] Failed to open dashboard: {e}")
 
     def _on_tick(self):
         if not self.animation_enabled:
@@ -220,6 +367,13 @@ class FloatingCompanionWidget(QWidget if _PYQT_AVAILABLE else object):
                 speed_mult = EMOTION_REGISTRY[self.state].pulse_speed
         except Exception:
             pass
+
+        # Faster rotation when executing PC agent workflows or thinking
+        if self.state == "WORKING":
+            speed_mult *= 2.2
+        elif self.state == "THINKING":
+            speed_mult *= 1.8
+
         self.phase += 0.05 * speed_mult * self.intensity
         if self.phase > 1000.0:
             self.phase = 0.0
@@ -233,9 +387,28 @@ class FloatingCompanionWidget(QWidget if _PYQT_AVAILABLE else object):
             self._show_context_menu(event.globalPosition().toPoint())
             event.accept()
 
+    def mouseDoubleClickEvent(self, event):
+        """Left double-click triggers voice activation or emergency stop when working."""
+        if event.button() == Qt.MouseButton.LeftButton:
+            if self.state == "WORKING":
+                self.stop_pc_agent()
+            else:
+                self.quick_voice_activation()
+            event.accept()
+
     def mouseMoveEvent(self, event):
+        """Drags widget while clamping position within screen boundaries."""
         if event.buttons() == Qt.MouseButton.LeftButton:
-            self.move(event.globalPosition().toPoint() - self.drag_position)
+            new_pos = event.globalPosition().toPoint() - self.drag_position
+            # Screen boundary clamping
+            screen = self.screen()
+            if screen:
+                geom = screen.availableGeometry()
+                clamped_x = max(geom.left(), min(new_pos.x(), geom.right() - self.width()))
+                clamped_y = max(geom.top(), min(new_pos.y(), geom.bottom() - self.height()))
+                self.move(clamped_x, clamped_y)
+            else:
+                self.move(new_pos)
             event.accept()
 
     def _show_context_menu(self, pos: QPoint):
@@ -260,8 +433,18 @@ class FloatingCompanionWidget(QWidget if _PYQT_AVAILABLE else object):
             }
         """)
 
-        act_briefing = menu.addAction("🎙️ Daily Briefing")
-        act_ptt = menu.addAction("🗣️ Push-to-Talk")
+        # Working / Emergency Stop
+        act_stop = None
+        if self.state == "WORKING" or self.active_task:
+            task_label = f" ({self.active_task[:16]}...)" if self.active_task else ""
+            act_stop = menu.addAction(f"🛑 STOP PC Agent{task_label}")
+            menu.addSeparator()
+
+        # Primary controls
+        act_ptt = menu.addAction("🎙️ Quick Voice Talk")
+        mute_label = "🔊 Unmute Microphone" if self.is_muted else "🔇 Mute Microphone"
+        act_mute = menu.addAction(mute_label)
+        act_briefing = menu.addAction("📋 Daily Briefing")
         menu.addSeparator()
 
         # Window & Behavior Submenu
@@ -300,13 +483,20 @@ class FloatingCompanionWidget(QWidget if _PYQT_AVAILABLE else object):
         act_fx_lbl.setChecked(self.show_label)
 
         menu.addSeparator()
-        act_dash = menu.addAction("🖥️ Open Dashboard")
-        act_mute = menu.addAction("🔇 Toggle Mic Mute")
+        act_dash = menu.addAction("🖥️ Open Dashboard (/app)")
+        act_settings = menu.addAction("⚙️ Assistant Settings")
         menu.addSeparator()
         act_hide = menu.addAction("❌ Hide Companion")
+        act_quit = menu.addAction("🚪 Quit Companion")
 
         action = menu.exec(pos)
-        if action == act_briefing:
+        if act_stop and action == act_stop:
+            self.stop_pc_agent()
+        elif action == act_ptt:
+            self.quick_voice_activation()
+        elif action == act_mute:
+            self.toggle_microphone_mute()
+        elif action == act_briefing:
             self._trigger_daily_briefing()
         elif action == act_aot:
             self.set_always_on_top(not self.always_on_top)
@@ -324,10 +514,17 @@ class FloatingCompanionWidget(QWidget if _PYQT_AVAILABLE else object):
             chosen = action.text().replace("Theme: ", "").upper()
             self.set_theme(chosen)
         elif action == act_dash:
-            import webbrowser
-            webbrowser.open("http://127.0.0.1:8000/app")
+            self.open_dashboard("/app")
+        elif action == act_settings:
+            self.open_dashboard("/app#settings")
         elif action == act_hide:
             self.hide()
+        elif action == act_quit:
+            app = QApplication.instance()
+            if app:
+                app.quit()
+            else:
+                self.close()
 
     def _trigger_daily_briefing(self):
         try:
@@ -347,10 +544,10 @@ class FloatingCompanionWidget(QWidget if _PYQT_AVAILABLE else object):
 
         accent_color = self.STATE_COLORS.get(self.state, QColor(0, 244, 255))
 
-        # 1. Outer Glow Aura (Optional)
+        # 1. Outer Glow Aura
         if self.show_aura:
             glow_grad = QRadialGradient(center_x, center_y, base_radius + 12.0)
-            glow_alpha = int(40 + 70 * (self.audio_level if self.state in ("LISTENING", "SPEAKING") else 0.3))
+            glow_alpha = int(40 + 70 * (self.audio_level if self.state in ("LISTENING", "SPEAKING", "WORKING") else 0.3))
             col_with_alpha = QColor(accent_color)
             col_with_alpha.setAlpha(glow_alpha)
             glow_grad.setColorAt(0.0, col_with_alpha)
@@ -366,17 +563,17 @@ class FloatingCompanionWidget(QWidget if _PYQT_AVAILABLE else object):
         core_grad.setColorAt(0.7, QColor(5, 12, 24, 245))
         core_grad.setColorAt(1.0, QColor(2, 6, 14, 255))
         painter.setBrush(QBrush(core_grad))
-        painter.setPen(QPen(accent_color, 1.8))
+        painter.setPen(QPen(accent_color, 2.0 if self.state == "WORKING" else 1.8))
         painter.drawEllipse(QPoint(int(center_x), int(center_y)), int(base_radius), int(base_radius))
 
-        # 3. Rotating Orbital Ring Segments (Optional)
+        # 3. Rotating Orbital Ring Segments
         if self.show_rings:
             painter.save()
             painter.translate(center_x, center_y)
-            rotation_speed = 3.0 if self.state == "THINKING" else (1.5 if self.state == "WORKING" else 0.8)
+            rotation_speed = 3.5 if self.state == "WORKING" else (2.5 if self.state == "THINKING" else 0.8)
             painter.rotate(self.phase * 20.0 * rotation_speed)
 
-            ring_pen = QPen(accent_color, 2.2)
+            ring_pen = QPen(accent_color, 2.4 if self.state == "WORKING" else 2.2)
             painter.setPen(ring_pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
 
@@ -391,7 +588,7 @@ class FloatingCompanionWidget(QWidget if _PYQT_AVAILABLE else object):
                 )
             painter.restore()
 
-        # 4. Animated Center Symbol / Voice Pulse (Optional)
+        # 4. Animated Center Symbol / Voice Pulse
         if self.show_pulse:
             pulse = math.sin(self.phase * 3.0) * 4.0 + (self.audio_level * 12.0)
             inner_r = max(6.0, 16.0 + pulse)
@@ -403,7 +600,7 @@ class FloatingCompanionWidget(QWidget if _PYQT_AVAILABLE else object):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(QPoint(int(center_x), int(center_y)), int(inner_r), int(inner_r))
 
-        # 5. Wholesome Decorative Vector Accents (Flowers / Hearts / Motivational Sparkles)
+        # 5. Wholesome Decorative Vector Accents
         if (self.character_presentation == "FEMALE" or
             self.state in ("HAPPY", "CHEERFUL", "EMPATHETIC", "PLAYFUL")):
             painter.save()
@@ -421,14 +618,17 @@ class FloatingCompanionWidget(QWidget if _PYQT_AVAILABLE else object):
                 painter.drawEllipse(QPointF(px, py), 2.2, 2.2)
             painter.restore()
 
-        # 6. State Text Label (Optional)
+        # 6. State Text Label / Task Indicator
         if self.show_label:
             painter.setPen(QColor(220, 245, 255, 220))
             font = QFont("Segoe UI", 8, QFont.Weight.Bold)
-            font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1.2)
+            font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1.0)
             painter.setFont(font)
             text_rect = QRectF(0, center_y + base_radius - 22, self.width(), 16)
-            painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, self.state)
+            display_text = self.state
+            if self.state == "WORKING" and self.active_task:
+                display_text = "WORKING"
+            painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, display_text)
 
 
 _COMPANION_INSTANCE: Optional[FloatingCompanionWidget] = None
@@ -461,4 +661,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
