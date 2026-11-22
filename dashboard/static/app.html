@@ -192,6 +192,53 @@
       border-color: #ef4444;
       color: #fff;
     }
+    .hero-voice-bar {
+      max-width: 680px;
+      width: 100%;
+      background: var(--surface-2);
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-xl);
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 24px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    }
+    .hero-mic-btn {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: var(--surface-3);
+      border: 1.5px solid var(--border-medium);
+      color: #fff;
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+    }
+    .hero-mic-btn:hover {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 14px rgba(0, 244, 255, 0.3);
+    }
+    .hero-mic-btn.active-listening {
+      background: rgba(16, 185, 129, 0.2);
+      border-color: #10b981;
+      box-shadow: 0 0 18px rgba(16, 185, 129, 0.5);
+      animation: micPulse 1.4s infinite ease-in-out;
+    }
+    .hero-mic-btn.mic-muted {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: #ef4444;
+      box-shadow: 0 0 14px rgba(239, 68, 68, 0.4);
+    }
+    @keyframes micPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.08); }
+    }
   </style>
 </head>
 <body>
@@ -439,17 +486,17 @@
               </div>
             </div>
 
-            <!-- Central Voice Interaction & Push-to-Talk Bar -->
+            <!-- Central Voice Interaction & Always-On Control Bar -->
             <div class="hero-voice-bar">
-              <button class="hero-mic-btn" id="hero-mic-btn" onclick="toggleVoiceInput()" title="Click to speak (or press Spacebar)">
-                <span id="hero-mic-icon">🎤</span>
+              <button class="hero-mic-btn" id="hero-mic-btn" onclick="toggleMicPrivacy()" title="Microphone Privacy Toggle (Mute/Unmute)">
+                <span id="hero-mic-icon">🎙️</span>
               </button>
               <div style="text-align:left; padding-right:12px;">
-                <div style="font-size:13px; font-weight:700; color:#fff;" id="hero-mic-prompt">Press Spacebar or Click Mic to Speak</div>
-                <div style="font-size:11px; color:var(--text-muted);">Speak naturally in Hindi, Hinglish, or English • Barge-In Active</div>
+                <div style="font-size:13px; font-weight:700; color:#fff;" id="hero-mic-prompt">Always-On Voice Active — Say "Hey Jarvis"</div>
+                <div style="font-size:11px; color:var(--text-muted);" id="hero-mic-sub">Hindi, Hinglish & English • Local Wake Standby • Barge-In Active</div>
               </div>
               <div style="margin-left:auto; display:flex; gap:8px;">
-                <button class="ui-btn" onclick="switchView('voice_settings')">🎭 Change Voice</button>
+                <button class="ui-btn" onclick="switchView('voice_settings')">🎭 Voice Settings</button>
                 <button class="ui-btn ui-btn-primary" onclick="toggleCommandPalette()">⚡ All Skills</button>
               </div>
             </div>
@@ -549,7 +596,7 @@
                   <option value="NEERJA_INDIAN_EN">Neerja — Fluent Indian English Neural</option>
                   <option value="AVA_MODERN_EN">Ava — Expressive Modern US English Neural</option>
                   <option value="SONIA_BRITISH_EN">Sonia — Polished British English Neural</option>
-                  <option value="ZIRA_OFFLINE">Zira — Local Offline Windows SAPI5 (100% Offline)</option>
+                  <option value="ZIRA_OFFLINE">Zira — English Offline Fallback (Windows SAPI5)</option>
                 </select>
                 <div style="display:flex; gap:8px; margin-top:8px;">
                   <button class="ui-btn" style="flex:1; padding:6px 12px; font-size:11px; background:var(--accent-purple-soft); border:1px solid var(--accent-purple); color:var(--text-primary);" onclick="previewSelectedVoice()">▶️ Test Voice Sample</button>
@@ -766,11 +813,75 @@
         <!-- ================================================================ -->
         <!-- VIEW 8: PC CONTROL & DESKTOP AGENT                               -->
         <!-- ================================================================ -->
+        <!-- ================================================================ -->
+        <!-- VIEW: PC WORKSTATION CONTROL & COMPUTER-USE AGENT                -->
+        <!-- ================================================================ -->
         <div class="view-panel" id="view-pc_control">
           <div class="panel-header-row">
             <div>
-              <div class="panel-title">💻 PC Workstation Control & Autonomous Agent</div>
-              <div class="panel-subtitle">Multi-Agent Orchestrator, Screen Vision error analysis, and safe system controls</div>
+              <div class="panel-title">💻 PC Workstation Control & Autonomous Computer Agent</div>
+              <div class="panel-subtitle">Plan-Act-Observe-Verify agentic loop, operator confirmation gates, screen vision & desktop controls</div>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="ui-btn ui-btn-danger" onclick="stopPcAgentExecution()" style="background:#dc2626; color:#fff; border-color:#dc2626; font-weight:800; box-shadow:0 0 10px rgba(220,38,38,0.4);">🛑 STOP Execution</button>
+            </div>
+          </div>
+
+          <!-- Stonic-Inspired PC Agent Execution Console -->
+          <div class="jarvis-card" style="padding:18px; margin-bottom:16px; border:1px solid rgba(139,92,246,0.35); background:linear-gradient(180deg, rgba(139,92,246,0.06) 0%, rgba(15,23,42,0.6) 100%);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+              <div>
+                <div style="font-size:16px; font-weight:800; color:#a78bfa; display:flex; align-items:center; gap:8px;">
+                  <span>⚡ Autonomous Computer-Use Agent (PLAN → ACT → OBSERVE → VERIFY)</span>
+                </div>
+                <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">Safe, permission-scoped desktop automation with real-time feedback & instant stop controls</div>
+              </div>
+              <div style="display:flex; align-items:center; gap:6px; font-size:11px; color:#94a3b8; background:rgba(0,0,0,0.3); padding:4px 10px; border-radius:20px; border:1px solid var(--border-subtle);">
+                <span style="color:#10b981;">●</span> Verified Safety Gates Active
+              </div>
+            </div>
+
+            <!-- Quick Action Preset Chips -->
+            <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+              <span style="font-size:11px; color:var(--text-muted); align-self:center;">Presets:</span>
+              <button class="ui-btn" style="padding:4px 10px; font-size:11px;" onclick="setPcAgentGoal('Launch Visual Studio Code in current workspace')">🚀 Launch VS Code</button>
+              <button class="ui-btn" style="padding:4px 10px; font-size:11px;" onclick="setPcAgentGoal('Capture real-time system CPU and RAM status')">📊 System Status</button>
+              <button class="ui-btn" style="padding:4px 10px; font-size:11px;" onclick="setPcAgentGoal('Search files matching .py across project')">🔍 Search .py Files</button>
+              <button class="ui-btn" style="padding:4px 10px; font-size:11px;" onclick="setPcAgentGoal('Open GitHub repository in default browser')">🌐 Open GitHub</button>
+              <button class="ui-btn" style="padding:4px 10px; font-size:11px;" onclick="setPcAgentGoal('Launch Notepad and create daily log')">📝 Launch Notepad</button>
+            </div>
+
+            <!-- Agent Goal Input & Execution Bar -->
+            <div style="display:flex; gap:10px; margin-bottom:12px;">
+              <input type="text" id="pc-agent-goal-input" value="Launch Visual Studio Code in current workspace" placeholder="Enter high-level desktop goal (e.g., Launch VS Code, inspect CPU load, find project files)..." style="flex:1; background:var(--surface-2); border:1px solid var(--border-medium); border-radius:var(--radius-md); padding:10px 14px; color:#fff; font-size:13px; outline:none;">
+              <button class="ui-btn ui-btn-primary" onclick="executePcAgentGoal()" style="background:#7c3aed; border-color:#7c3aed; font-weight:700; padding:10px 18px;">▶ Execute Goal</button>
+              <button class="ui-btn ui-btn-danger" onclick="stopPcAgentExecution()" style="background:#dc2626; border-color:#dc2626; color:#fff; font-weight:800; padding:10px 14px;">🛑 STOP</button>
+            </div>
+
+            <!-- Live Confirmation Gate Banner -->
+            <div id="pc-agent-permission-banner" style="display:none; background:rgba(245,158,11,0.15); border:1px solid #f59e0b; border-radius:8px; padding:12px 14px; margin-bottom:12px;"></div>
+
+            <!-- Execution Result & Step Lifecycle -->
+            <div id="pc-agent-result-card" style="display:none; background:var(--surface-2); border-radius:8px; padding:14px; border:1px solid var(--border-medium);">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <span id="pc-agent-progress-text" style="font-size:12px; font-weight:700; color:var(--text-bright);">Initializing plan...</span>
+                <button class="ui-btn" style="padding:2px 8px; font-size:10px;" onclick="loadPcAgentAudit()">Refresh Audit</button>
+              </div>
+              <div style="height:6px; background:var(--surface-3); border-radius:3px; overflow:hidden; margin-bottom:12px;">
+                <div id="pc-agent-progress-fill" style="height:100%; width:0%; background:#8b5cf6; transition:width 0.3s ease, background 0.3s ease;"></div>
+              </div>
+              <div id="pc-agent-steps-container" style="display:flex; flex-direction:column; gap:8px;"></div>
+            </div>
+
+            <!-- Agent Audit Trail Log -->
+            <div style="margin-top:14px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.08);">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <span style="font-size:12px; font-weight:700; color:var(--text-subtle);">📜 Agent Activity & Audit Trail (data/computer_agent_audit.log)</span>
+                <span style="font-size:10px; color:#10b981;">Secrets Auto-Redacted</span>
+              </div>
+              <div id="pc-agent-audit-log" style="background:#090d16; border:1px solid var(--border-subtle); border-radius:6px; padding:10px; max-height:120px; overflow-y:auto;">
+                <span style="color:var(--text-muted); font-size:11px;">Loading audit entries...</span>
+              </div>
             </div>
           </div>
 
@@ -1039,6 +1150,26 @@
           </div>
 
           <div class="card-grid-2">
+            <!-- Always-On Voice Mode & Standby Controls -->
+            <div class="jarvis-card" style="padding:18px; display:flex; flex-direction:column; gap:12px;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div style="font-size:14px; font-weight:700;">Always-On Voice Mode</div>
+                <span id="voice-always-on-badge" class="badge" style="background:rgba(16,185,129,0.2); color:#10b981; border:1px solid #10b981;">STANDBY</span>
+              </div>
+              <div style="font-size:12px; color:var(--text-muted); line-height:1.4;">
+                Enable continuous hands-free voice interaction. J.A.R.V.I.S. automatically enters local standby listening for "Hey Jarvis" or "Hello Jarvis" without keypresses.
+              </div>
+              <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-size:13px; font-weight:600;">
+                <input type="checkbox" id="chk-always-on-voice" checked onchange="toggleAlwaysOnVoicePreference(this.checked)" style="width:18px; height:18px; accent-color:var(--accent-cyan);">
+                <span>Enable Always-On Voice Mode (Hands-Free Standby)</span>
+              </label>
+              <div style="font-size:11px; color:var(--text-secondary); display:flex; flex-direction:column; gap:4px; background:var(--surface-3); padding:10px; border-radius:8px;">
+                <div>🎙️ <b>Standby Wake Words:</b> "Hey Jarvis", "Hello Jarvis"</div>
+                <div>🛡️ <b>Privacy Protection:</b> 100% local on-device wake-word detection (Zero audio leaves PC in standby)</div>
+                <div>🔇 <b>Hardware Mute:</b> Microphone button provides instant global privacy mute</div>
+              </div>
+            </div>
+
             <!-- Voice Persona Select -->
             <div class="jarvis-card" style="padding:18px; display:flex; flex-direction:column; gap:12px;">
               <div style="font-size:14px; font-weight:700;">Selectable Female Voices</div>
@@ -1047,7 +1178,7 @@
                 <option value="NEERJA_INDIAN_EN">Neerja — Fluent Indian English & Hinglish Neural</option>
                 <option value="AVA_MODERN_EN">Ava — Expressive Modern US English Neural</option>
                 <option value="SONIA_BRITISH_EN">Sonia — Polished British English Neural</option>
-                <option value="ZIRA_OFFLINE">Zira — Local Offline Windows SAPI5 (100% Offline)</option>
+                <option value="ZIRA_OFFLINE">Zira — English Offline Fallback (Windows SAPI5)</option>
               </select>
               <div>
                 <button class="ui-btn" onclick="previewSelectedVoice()">▶️ Preview Voice</button>
@@ -1656,6 +1787,26 @@
           if (charSel) charSel.value = activeId;
           localStorage.setItem('jarvis_voice_persona', activeId);
         }
+
+        // Query Always-On Voice Mode status
+        const aoRes = await fetch('/api/voice/always_on');
+        const aoData = await aoRes.json();
+        const alwaysOn = (aoData && aoData.ok) ? !!aoData.always_on : true;
+        window.alwaysOnVoiceActive = alwaysOn;
+        window.pushToTalkMode = !alwaysOn;
+        const chk = document.getElementById('chk-always-on-voice');
+        if (chk) chk.checked = alwaysOn;
+        const badge = document.getElementById('voice-always-on-badge');
+        if (badge) {
+          badge.innerText = alwaysOn ? 'STANDBY' : 'DISABLED';
+          badge.style.color = alwaysOn ? '#10b981' : '#f59e0b';
+        }
+        if (alwaysOn && !window.isMicMuted) {
+          setAssistantState('STANDBY');
+          startAlwaysOnListening();
+        } else {
+          setAssistantState(window.isMicMuted ? 'MUTED' : 'IDLE');
+        }
       } catch (e) {
         console.warn('Voice settings bootstrap note:', e);
       }
@@ -1807,6 +1958,7 @@
       if (viewId === 'audit') loadAuditLogs();
       if (viewId === 'whatsapp') loadWhatsAppDashboard();
       if (viewId === 'reminders') loadSmartRemindersList();
+      if (viewId === 'pc_control') loadPcAgentAudit();
     }
 
     // ── Theme Manager ────────────────────────────────────────────────────────
@@ -2629,8 +2781,8 @@
         const p = document.getElementById('cmd-palette');
         if (p && p.classList.contains('active')) toggleCommandPalette();
       }
-      // Spacebar Push-to-Talk (when not inside an input field)
-      if (e.code === 'Space' && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
+      // Spacebar Push-to-Talk (only active when user explicitly chooses Push-to-Talk fallback mode)
+      if (e.code === 'Space' && window.pushToTalkMode && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
         e.preventDefault();
         toggleVoiceInput();
       }
@@ -2775,7 +2927,11 @@
     }
 
     let activeRecognition = null;
-    window.handsFreeActive = false;
+    // ── Always-On Voice & State Machine Management ───────────────────────────
+    window.alwaysOnVoiceActive = true;
+    window.isMicMuted = false;
+    window.pushToTalkMode = false;
+    let activeRecognition = null;
 
     function interruptAudioPlayback(reason = 'barge_in') {
       const player = document.getElementById('audio-player');
@@ -2790,34 +2946,97 @@
       return false;
     }
 
-    function toggleVoiceInput() {
-      // Barge-in: if currently speaking/playing audio, interrupt audio immediately
-      interruptAudioPlayback('user_toggle');
+    function toggleMicPrivacy() {
+      interruptAudioPlayback('user_mute_toggle');
+      window.isMicMuted = !window.isMicMuted;
 
-      isListening = !isListening;
-      const micBtn = document.getElementById('hero-mic-btn');
-      const micIcon = document.getElementById('hero-mic-icon');
-      const micPrompt = document.getElementById('hero-mic-prompt');
-      
-      if (isListening) {
-        if (micBtn) micBtn.classList.add('active-listening');
-        if (micIcon) micIcon.innerText = '⏹️';
-        if (micPrompt) micPrompt.innerText = 'Listening... Speak now or press Spacebar to finish';
-        setAssistantState('LISTENING');
-        startSpeechRecognition();
-      } else {
-        if (micBtn) micBtn.classList.remove('active-listening');
-        if (micIcon) micIcon.innerText = '🎤';
-        if (micPrompt) micPrompt.innerText = 'Press Spacebar or Click Mic to Speak';
-        setAssistantState('IDLE');
+      if (window.isMicMuted) {
         stopSpeechRecognition();
+        setAssistantState('MUTED');
+        showToast('🔇 Microphone Muted (Privacy Active)');
+        fetch('/api/voice/mute', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({muted: true})
+        }).catch(() => {});
+      } else {
+        showToast('🎙️ Microphone Active (Always-On Standby)');
+        fetch('/api/voice/mute', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({muted: false})
+        }).catch(() => {});
+        if (window.alwaysOnVoiceActive) {
+          setAssistantState('STANDBY');
+          startAlwaysOnListening();
+        } else {
+          setAssistantState('IDLE');
+        }
       }
     }
 
+    // Backward-compatibility wrapper for legacy triggers
+    function toggleVoiceInput() {
+      if (window.alwaysOnVoiceActive) {
+        toggleMicPrivacy();
+      } else {
+        if (isListening) {
+          stopSpeechRecognition();
+          setAssistantState('IDLE');
+          isListening = false;
+        } else {
+          startSpeechRecognition();
+          setAssistantState('LISTENING');
+          isListening = true;
+        }
+      }
+    }
+
+    async function toggleAlwaysOnVoicePreference(enabled) {
+      window.alwaysOnVoiceActive = !!enabled;
+      window.pushToTalkMode = !enabled;
+      localStorage.setItem('jarvis_always_on_voice', enabled ? 'true' : 'false');
+
+      const badge = document.getElementById('voice-always-on-badge');
+      if (badge) {
+        badge.innerText = enabled ? 'STANDBY' : 'DISABLED';
+        badge.style.color = enabled ? '#10b981' : '#f59e0b';
+      }
+
+      const chk = document.getElementById('chk-always-on-voice');
+      if (chk) chk.checked = enabled;
+
+      try {
+        await fetch('/api/voice/always_on', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({enabled: enabled})
+        });
+        showToast(`Always-On Voice Mode: ${enabled ? 'ENABLED' : 'DISABLED'}`);
+      } catch (e) {
+        console.warn('Failed to persist always-on setting to backend:', e);
+      }
+
+      if (enabled && !window.isMicMuted) {
+        setAssistantState('STANDBY');
+        startAlwaysOnListening();
+      } else if (!enabled) {
+        stopSpeechRecognition();
+        setAssistantState(window.isMicMuted ? 'MUTED' : 'IDLE');
+      }
+    }
+
+    function startAlwaysOnListening() {
+      if (window.isMicMuted) return;
+      isListening = true;
+      startSpeechRecognition();
+    }
+
     function startSpeechRecognition() {
+      if (window.isMicMuted) return;
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SpeechRecognition) {
-        showToast('Web Speech API not available. Type in chat or use Faster-Whisper.');
+        console.warn('Web Speech API not available in this browser context.');
         return;
       }
       stopSpeechRecognition();
@@ -2838,8 +3057,9 @@
         recognition.onspeechstart = () => {
           interruptAudioPlayback('speech_start');
         };
-        
+
         recognition.onresult = (event) => {
+          if (window.isMicMuted) return;
           interruptAudioPlayback('speech_result');
 
           let interimTranscript = '';
@@ -2858,31 +3078,59 @@
           }
 
           if (finalTranscript.trim()) {
-            if (isListening) toggleVoiceInput();
-            handleSpokenInput(finalTranscript.trim());
+            const raw = finalTranscript.trim();
+            const lower = raw.toLowerCase();
+
+            // When in STANDBY, filter strictly for Wake Word ("Hey Jarvis", "Hello Jarvis", "Jarvis")
+            if (currentEmotion === 'STANDBY' || currentEmotion === 'IDLE') {
+              const wakeMatch = lower.match(/\b(hey\s+jarvis|hello\s+jarvis|hi\s+jarvis|namaste\s+jarvis|suno\s+jarvis|jarvis)\b/i);
+              if (wakeMatch) {
+                setAssistantState('WAKE_DETECTED');
+                updateSubtitle(raw, 'WAKE DETECTED');
+                // Extract query after wake phrase if uttered in one sentence
+                const wakePhrase = wakeMatch[0];
+                const wakeIdx = lower.indexOf(wakePhrase);
+                const queryAfter = raw.substring(wakeIdx + wakePhrase.length).replace(/^[,.:\s]+/, '').trim();
+
+                if (queryAfter.length > 1) {
+                  setTimeout(() => handleSpokenInput(queryAfter), 200);
+                } else {
+                  setTimeout(() => {
+                    setAssistantState('LISTENING');
+                    updateSubtitle('Listening to your command...', 'READY');
+                  }, 350);
+                }
+              } else {
+                console.log('Ambient speech ignored in STANDBY (no wake word):', raw);
+              }
+            } else if (currentEmotion === 'LISTENING' || currentEmotion === 'WAKE_DETECTED') {
+              handleSpokenInput(raw);
+            }
           }
         };
 
         recognition.onerror = (e) => {
-          console.warn('Speech recognition warning:', e.error);
-          if (e.error !== 'no-speech' && isListening) {
-            toggleVoiceInput();
+          if (e.error !== 'no-speech') {
+            console.warn('Speech recognition notice:', e.error);
           }
         };
 
         recognition.onend = () => {
-          if (isListening) {
-            if (window.handsFreeActive) {
-              try { recognition.start(); } catch(e){}
-            } else {
-              toggleVoiceInput();
-            }
+          if (!window.isMicMuted && window.alwaysOnVoiceActive) {
+            setTimeout(() => {
+              if (!window.isMicMuted && window.alwaysOnVoiceActive && currentEmotion !== 'SPEAKING' && currentEmotion !== 'THINKING') {
+                try { recognition.start(); } catch (err) {}
+              }
+            }, 300);
+          } else if (isListening && !window.alwaysOnVoiceActive) {
+            isListening = false;
+            setAssistantState('IDLE');
           }
         };
 
         recognition.start();
       } catch (e) {
-        console.warn('SpeechRecognition start error:', e);
+        console.warn('SpeechRecognition initialization note:', e);
       }
     }
 
@@ -2920,16 +3168,20 @@
             playAudioResponse(d.audio_id);
           } else {
             setTimeout(() => {
-              setAssistantState('IDLE');
-              if (window.handsFreeActive && !isListening) {
-                toggleVoiceInput();
+              if (window.alwaysOnVoiceActive && !window.isMicMuted) {
+                setAssistantState('STANDBY');
+                startAlwaysOnListening();
+              } else {
+                setAssistantState(window.isMicMuted ? 'MUTED' : 'IDLE');
               }
             }, 2500);
           }
         }
       } catch (e) {
         setAssistantState('ERROR');
-        setTimeout(() => setAssistantState('IDLE'), 2000);
+        setTimeout(() => {
+          setAssistantState(window.alwaysOnVoiceActive && !window.isMicMuted ? 'STANDBY' : 'IDLE');
+        }, 2000);
       }
     }
 
@@ -2958,12 +3210,19 @@
       player.src = `/api/audio/${audioId}`;
       player.play().catch(e => {
         console.warn('Audio playback error:', e);
-        setAssistantState('IDLE');
+        if (window.alwaysOnVoiceActive && !window.isMicMuted) {
+          setAssistantState('STANDBY');
+          startAlwaysOnListening();
+        } else {
+          setAssistantState(window.isMicMuted ? 'MUTED' : 'IDLE');
+        }
       });
       player.onended = () => {
-        setAssistantState('IDLE');
-        if (window.handsFreeActive && !isListening) {
-          setTimeout(() => toggleVoiceInput(), 400);
+        if (window.alwaysOnVoiceActive && !window.isMicMuted) {
+          setAssistantState('STANDBY');
+          startAlwaysOnListening();
+        } else {
+          setAssistantState(window.isMicMuted ? 'MUTED' : 'IDLE');
         }
       };
     }
@@ -2985,8 +3244,61 @@
       currentEmotion = state;
       const heroBadge = document.getElementById('hero-state-text');
       const navBadge = document.getElementById('nav-state-badge');
-      if (heroBadge) heroBadge.innerText = state;
-      if (navBadge) navBadge.innerText = state;
+      const micPrompt = document.getElementById('hero-mic-prompt');
+      const micBtn = document.getElementById('hero-mic-btn');
+      const micIcon = document.getElementById('hero-mic-icon');
+
+      if (heroBadge) {
+        heroBadge.innerText = state;
+        if (state === 'STANDBY') { heroBadge.style.color = '#38bdf8'; }
+        else if (state === 'WAKE_DETECTED') { heroBadge.style.color = '#00f4ff'; }
+        else if (state === 'LISTENING') { heroBadge.style.color = '#10b981'; }
+        else if (state === 'THINKING') { heroBadge.style.color = '#fbbf24'; }
+        else if (state === 'SPEAKING') { heroBadge.style.color = '#d4a853'; }
+        else if (state === 'MUTED') { heroBadge.style.color = '#ef4444'; }
+        else if (state === 'ERROR') { heroBadge.style.color = '#ef4444'; }
+        else { heroBadge.style.color = '#00f4ff'; }
+      }
+      if (navBadge) {
+        navBadge.innerText = state;
+      }
+
+      if (micPrompt) {
+        if (state === 'MUTED') {
+          micPrompt.innerText = 'Microphone Muted (Privacy Active)';
+          if (micIcon) micIcon.innerText = '🔇';
+          if (micBtn) { micBtn.classList.remove('active-listening'); micBtn.classList.add('mic-muted'); }
+        } else if (state === 'WAKE_DETECTED') {
+          micPrompt.innerText = 'Wake Word Detected — Listening...';
+          if (micIcon) micIcon.innerText = '⚡';
+          if (micBtn) { micBtn.classList.remove('mic-muted'); micBtn.classList.add('active-listening'); }
+        } else if (state === 'LISTENING') {
+          micPrompt.innerText = 'Listening to your voice... (Barge-In Active)';
+          if (micIcon) micIcon.innerText = '🎙️';
+          if (micBtn) { micBtn.classList.remove('mic-muted'); micBtn.classList.add('active-listening'); }
+        } else if (state === 'THINKING') {
+          micPrompt.innerText = 'Processing request...';
+          if (micIcon) micIcon.innerText = '⚙️';
+          if (micBtn) { micBtn.classList.remove('active-listening'); micBtn.classList.remove('mic-muted'); }
+        } else if (state === 'SPEAKING') {
+          micPrompt.innerText = 'Speaking (Speak to interrupt)...';
+          if (micIcon) micIcon.innerText = '🔊';
+          if (micBtn) { micBtn.classList.remove('active-listening'); micBtn.classList.remove('mic-muted'); }
+        } else if (state === 'ERROR') {
+          micPrompt.innerText = 'Voice Engine Error — Check Mic Permission';
+          if (micIcon) micIcon.innerText = '⚠️';
+          if (micBtn) { micBtn.classList.remove('active-listening'); micBtn.classList.remove('mic-muted'); }
+        } else { // STANDBY or IDLE
+          if (window.alwaysOnVoiceActive) {
+            micPrompt.innerText = 'Always-On Voice Active — Say "Hey Jarvis"';
+            if (micIcon) micIcon.innerText = '🎙️';
+          } else {
+            micPrompt.innerText = 'Push-to-Talk Standby — Click Mic to Speak';
+            if (micIcon) micIcon.innerText = '🎤';
+          }
+          if (micBtn) { micBtn.classList.remove('active-listening'); micBtn.classList.remove('mic-muted'); }
+        }
+      }
     }
 
     // ── 60 FPS HTML5 Canvas Companion Renderer ────────────────────────────────
@@ -3183,10 +3495,12 @@
           // 4. Central Living Core Aperture (Companion Iris)
           ctx.save();
           let coreColor = '#8b5cf6';
-          if (currentEmotion === 'ERROR') coreColor = '#ef4444';
+          if (currentEmotion === 'ERROR' || currentEmotion === 'MUTED') coreColor = '#ef4444';
+          else if (currentEmotion === 'WAKE_DETECTED') coreColor = '#00f4ff';
           else if (currentEmotion === 'SPEAKING') coreColor = '#d4a853';
-          else if (currentEmotion === 'LISTENING') coreColor = '#06b6d4';
-          else if (currentEmotion === 'THINKING') coreColor = '#7c3aed';
+          else if (currentEmotion === 'LISTENING') coreColor = '#10b981';
+          else if (currentEmotion === 'THINKING') coreColor = '#fbbf24';
+          else if (currentEmotion === 'STANDBY') coreColor = '#38bdf8';
           else if (currentEmotion === 'WORKING') coreColor = '#10b981';
 
           const coreGrad = ctx.createRadialGradient(cx, cy, 2, cx, cy, (W > 100) ? 26 : 9);
@@ -3196,7 +3510,13 @@
           ctx.fillStyle = coreGrad;
           ctx.beginPath();
 
-          if (currentEmotion === 'LISTENING') {
+          if (currentEmotion === 'MUTED') {
+            const muteR = (W > 100) ? 14 : 5;
+            ctx.arc(cx, cy, muteR, 0, Math.PI * 2);
+          } else if (currentEmotion === 'WAKE_DETECTED') {
+            const wakeR = (W > 100) ? (32 + Math.sin(tick * 0.25) * 6) : 11;
+            ctx.arc(cx, cy, wakeR, 0, Math.PI * 2);
+          } else if (currentEmotion === 'LISTENING') {
             const listenR = (W > 100) ? (28 + Math.sin(tick * 0.12) * 5) : 10;
             ctx.arc(cx, cy, listenR, 0, Math.PI * 2);
           } else if (currentEmotion === 'THINKING') {
@@ -3204,7 +3524,7 @@
           } else if (currentEmotion === 'SPEAKING') {
             const speakR = (W > 100) ? (24 + Math.sin(tick * 0.18) * 7) : 9;
             ctx.arc(cx, cy, speakR, 0, Math.PI * 2);
-          } else {
+          } else { // STANDBY / IDLE
             const eyeR = (W > 100) ? (20 + Math.sin(tick * 0.06) * 3) : (6 + Math.sin(tick * 0.06) * 1.5);
             ctx.arc(cx, cy, eyeR, 0, Math.PI * 2);
           }
@@ -3225,6 +3545,175 @@
     }
 
     // ── Additional Panel Data Loaders ──────────────────────────────────────────
+    // ── PC Computer-Use Agent Handlers ────────────────────────────────────────
+    let _activePcPlanId = null;
+
+    function setPcAgentGoal(text) {
+      const inp = document.getElementById('pc-agent-goal-input');
+      if (inp) inp.value = text;
+    }
+
+    async function executePcAgentGoal() {
+      const inp = document.getElementById('pc-agent-goal-input');
+      const goal = inp ? inp.value.trim() : '';
+      if (!goal) { showToast('Please enter a computer task or goal'); return; }
+      showToast('PC Agent planning & executing task...');
+      setAssistantState('WORKING');
+
+      const progBar = document.getElementById('pc-agent-progress-fill');
+      const progTxt = document.getElementById('pc-agent-progress-text');
+      const stepsBox = document.getElementById('pc-agent-steps-container');
+      const resultCard = document.getElementById('pc-agent-result-card');
+      const gateBanner = document.getElementById('pc-agent-permission-banner');
+
+      if (resultCard) resultCard.style.display = 'block';
+      if (gateBanner) gateBanner.style.display = 'none';
+      if (progBar) { progBar.style.width = '30%'; progBar.style.background = '#8b5cf6'; }
+      if (progTxt) progTxt.innerText = 'Planning action sequence...';
+
+      try {
+        const res = await fetch('/api/pc_agent/execute', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ goal: goal })
+        });
+        const d = await res.json();
+        _activePcPlanId = d.plan ? d.plan.plan_id : null;
+
+        renderPcAgentPlan(d);
+        loadPcAgentAudit();
+        setAssistantState('IDLE');
+      } catch (e) {
+        showToast('PC Agent execution error: ' + e);
+        setAssistantState('ERROR');
+      }
+    }
+
+    function renderPcAgentPlan(data) {
+      const progBar = document.getElementById('pc-agent-progress-fill');
+      const progTxt = document.getElementById('pc-agent-progress-text');
+      const stepsBox = document.getElementById('pc-agent-steps-container');
+      const gateBanner = document.getElementById('pc-agent-permission-banner');
+
+      if (!data.plan) {
+        if (progTxt) progTxt.innerText = data.error || 'Execution status updated';
+        return;
+      }
+
+      const plan = data.plan;
+      const isComplete = plan.status === 'COMPLETED';
+      const isAwaiting = data.status === 'AWAITING_PERMISSION';
+      const isStopped = data.status === 'STOPPED' || plan.status === 'CANCELLED';
+
+      if (progBar) {
+        progBar.style.width = isComplete ? '100%' : (isAwaiting ? '60%' : (isStopped ? '45%' : '80%'));
+        progBar.style.background = isComplete ? '#10b981' : (isAwaiting ? '#f59e0b' : (isStopped ? '#ef4444' : '#8b5cf6'));
+      }
+      if (progTxt) {
+        progTxt.innerText = `Status: ${plan.status} • Goal: "${plan.goal}"`;
+      }
+
+      // Check permission banner
+      if (isAwaiting && gateBanner && data.step) {
+        gateBanner.style.display = 'block';
+        gateBanner.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <div>
+              <div style="font-weight:700; color:#fbbf24; font-size:13px;">⚠️ Operator Confirmation Gate: Destructive Action</div>
+              <div style="font-size:12px; color:#e2e8f0; margin-top:2px;">Step ${data.step.step_id}: ${data.step.description} (${data.step.action_name})</div>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="ui-btn" style="background:#10b981; color:#fff; border-color:#10b981; font-weight:700;" onclick="confirmPcAgentStep(${data.step.step_id}, true)">Authorize (CONFIRM)</button>
+              <button class="ui-btn ui-btn-danger" onclick="confirmPcAgentStep(${data.step.step_id}, false)">Deny / Stop</button>
+            </div>
+          </div>
+        `;
+      } else if (gateBanner) {
+        gateBanner.style.display = 'none';
+      }
+
+      if (stepsBox && plan.steps) {
+        stepsBox.innerHTML = plan.steps.map(s => {
+          let badgeColor = '#64748b';
+          let icon = '⏳';
+          if (s.status === 'VERIFIED' || s.status === 'COMPLETED') { badgeColor = '#10b981'; icon = '✅'; }
+          else if (s.status === 'RUNNING') { badgeColor = '#8b5cf6'; icon = '⚙️'; }
+          else if (s.status === 'AWAITING_PERMISSION') { badgeColor = '#f59e0b'; icon = '⚠️'; }
+          else if (s.status === 'FAILED') { badgeColor = '#ef4444'; icon = '❌'; }
+          else if (s.status === 'SKIPPED') { badgeColor = '#94a3b8'; icon = '⏭️'; }
+
+          return `
+            <div style="background:var(--surface-3); border:1px solid var(--border-medium); border-radius:8px; padding:10px 14px; display:flex; flex-direction:column; gap:6px;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-size:14px;">${icon}</span>
+                  <span style="font-weight:700; color:var(--text-bright);">Step ${s.step_id}: ${s.description}</span>
+                  <span style="font-size:11px; color:var(--text-muted); font-family:monospace;">[${s.action_name}]</span>
+                </div>
+                <span style="font-size:11px; padding:3px 8px; border-radius:4px; background:${badgeColor}22; color:${badgeColor}; font-weight:700;">${s.status}</span>
+              </div>
+              ${s.observed_result ? `<div style="font-size:11px; color:var(--text-subtle); background:rgba(0,0,0,0.25); padding:6px 10px; border-radius:4px; font-family:monospace;"><b>Observed:</b> ${s.observed_result}</div>` : ''}
+              ${s.error ? `<div style="font-size:11px; color:#ef4444; background:rgba(239,68,68,0.1); padding:6px 10px; border-radius:4px;"><b>Error:</b> ${s.error}</div>` : ''}
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    async function confirmPcAgentStep(stepId, confirmed) {
+      if (!_activePcPlanId) return;
+      showToast(confirmed ? 'Authorizing destructive step...' : 'Denying permission...');
+      try {
+        const res = await fetch('/api/pc_agent/permission', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ plan_id: _activePcPlanId, step_id: stepId, confirmed: confirmed })
+        });
+        const d = await res.json();
+        if (d.ok && d.execution) {
+          renderPcAgentPlan(d.execution);
+          loadPcAgentAudit();
+        } else {
+          showToast(d.message || 'Permission updated');
+        }
+      } catch (e) {
+        showToast('Permission update error: ' + e);
+      }
+    }
+
+    async function stopPcAgentExecution() {
+      showToast('🛑 Operator triggered STOP execution!');
+      try {
+        const res = await fetch('/api/pc_agent/stop', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ plan_id: _activePcPlanId })
+        });
+        const d = await res.json();
+        showToast(d.message || 'Halted');
+        const progTxt = document.getElementById('pc-agent-progress-text');
+        if (progTxt) progTxt.innerText = 'Execution STOPPED by operator.';
+        const progBar = document.getElementById('pc-agent-progress-fill');
+        if (progBar) { progBar.style.width = '100%'; progBar.style.background = '#ef4444'; }
+        loadPcAgentAudit();
+      } catch (e) {
+        showToast('Error stopping PC Agent: ' + e);
+      }
+    }
+
+    async function loadPcAgentAudit() {
+      try {
+        const res = await fetch('/api/pc_agent/audit?limit=15');
+        const d = await res.json();
+        const box = document.getElementById('pc-agent-audit-log');
+        if (box && d.ok && d.audit) {
+          box.innerHTML = d.audit.length ? d.audit.map(line => `
+            <div style="font-family:monospace; font-size:11px; line-height:1.5; color:#cbd5e1; border-bottom:1px solid rgba(255,255,255,0.05); padding:3px 0;">${line}</div>
+          `).join('') : '<span style="color:var(--text-muted); font-size:11px;">Zero actions logged yet.</span>';
+        }
+      } catch (e) {}
+    }
+
     // ── Multi-Agent Orchestrator Handlers ─────────────────────────────────────
     let _activePlanId = null;
 

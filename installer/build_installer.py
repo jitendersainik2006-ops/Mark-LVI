@@ -99,15 +99,18 @@ def build_release_package() -> dict:
         shutil.copy2(BASE_DIR / "config" / "jarvis.ico", dst_cfg / "jarvis.ico")
     if (BASE_DIR / "config" / "cloudflared_named_tunnel.yml").exists():
         shutil.copy2(BASE_DIR / "config" / "cloudflared_named_tunnel.yml", dst_cfg / "cloudflared_named_tunnel.yml")
+    if (BASE_DIR / "config" / "pronunciation_rules.json").exists():
+        shutil.copy2(BASE_DIR / "config" / "pronunciation_rules.json", dst_cfg / "pronunciation_rules.json")
+        print("  ✓ Bundled config/pronunciation_rules.json")
     # Release version record
     ver_data = {
         "version": "56.1.0",
-        "codename": "Post-Release-Defect-Fixed-Companion",
-        "release_name": "J.A.R.V.I.S. Mark LVI Master Release v56.1.0",
+        "codename": "Stonic-AI-Companion-Master-Rebuild",
+        "release_name": "J.A.R.V.I.S. Mark LVI Stonic AI Companion Master Release v56.1.0",
         "release_date": "2026-11-22",
     }
     (dst_cfg / "version.json").write_text(json.dumps(ver_data, indent=2), encoding="utf-8")
-    print("  ✓ Created config/version.json (v56.1.0 Post-Release-Defect-Fixed-Companion)")
+    print("  ✓ Created config/version.json (v56.1.0 Stonic-AI-Companion-Master-Rebuild)")
 
     # 3. Data folder skeleton
     dst_data = RELEASE_DIR / "data"
@@ -121,6 +124,8 @@ def build_release_package() -> dict:
         "main.py",
         "ui.py",
         "requirements.txt",
+        "launch_floating_companion.bat",
+        "README_INSTALL_FOR_SIR.md",
         "PROJECT_CONTEXT.md",
         "PROJECT_STATUS.md",
         "CHANGELOG.md",

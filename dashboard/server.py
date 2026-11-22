@@ -2094,6 +2094,8 @@ class DashboardServer:
         _ALLOWED_ACTIONS = {
             "volume_up", "volume_down", "volume_mute",
             "lock_screen", "media_play_pause", "wake", "sleep",
+            "system_status", "get_system_status", "orchestrator_plan",
+            "computer_control", "pc_agent",
         }
 
         @app.post("/api/action")
@@ -2102,13 +2104,44 @@ class DashboardServer:
                 return JSONResponse({"error": "Unauthorized"}, status_code=401)
             body = await req.json()
             action = str(body.get("action", "")).strip().lower()
+
+            # Check skill_router first for dynamic skill execution
+            try:
+                from core.skill_router import skill_router
+                if skill_router.get_skill(action):
+                    res = skill_router.execute_skill(action, body.get("params", {}), confirmed=bool(body.get("confirmed", False)))
+                    return JSONResponse({"ok": True, "action": action, "result": res})
+            except Exception:
+                pass
+
             if action not in _ALLOWED_ACTIONS:
                 return JSONResponse(
                     {"ok": False, "error": f"Action '{action}' is not in the approved security allowlist."},
                     status_code=403,
                 )
-            
+
             try:
+                # Specialized Subsystem Dispatch
+                if action in ("system_status", "get_system_status"):
+                    from actions.system_monitor import get_system_status
+                    data = get_system_status()
+                    return JSONResponse({"ok": True, "action": action, "result": data, "message": "System status retrieved"})
+
+                if action == "orchestrator_plan":
+                    plan_id = body.get("plan_id") or body.get("id")
+                    from core.orchestrator import orchestrator
+                    if plan_id:
+                        res = orchestrator.execute_plan(plan_id)
+                    else:
+                        res = {"ok": False, "error": "plan_id required"}
+                    return JSONResponse({"ok": True, "action": action, "result": res})
+
+                if action in ("computer_control", "pc_agent"):
+                    from core.computer_agent import computer_agent
+                    goal = body.get("goal") or body.get("command") or body.get("instruction") or "PC Automation"
+                    res = computer_agent.execute_goal(goal, steps_data=body.get("steps"))
+                    return JSONResponse({"ok": True, "action": action, "result": res})
+
                 msg = ""
                 if sys.platform == "win32":
                     import ctypes
@@ -2164,7 +2197,7 @@ class DashboardServer:
                     if self._sleep_callback:
                         self._sleep_callback()
                     msg = "Assistant put to sleep"
-                
+
                 try:
                     b_coro = self.broadcast({"type": "sys", "text": f"Remote action: {msg}"})
                     asyncio.create_task(b_coro)
@@ -2173,6 +2206,76 @@ class DashboardServer:
                 return JSONResponse({"ok": True, "action": action, "message": msg})
             except Exception as e:
                 return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+        # ── PC Computer-Use Agent Endpoints ─────────────────────────────────
+        @app.get("/api/pc_agent/plans")
+        async def pc_agent_list_plans_ep(req: Request):
+            from core.computer_agent import computer_agent
+            plans = computer_agent.list_plans()
+            return JSONResponse({"ok": True, "plans": plans})
+
+        @app.post("/api/pc_agent/plan")
+        async def pc_agent_create_plan_ep(req: Request):
+            from core.computer_agent import computer_agent
+            try:
+                b = await req.json()
+            except Exception:
+                b = {}
+            goal = b.get("goal", "").strip() or "General PC Automation"
+            steps = b.get("steps", [])
+            plan = computer_agent.create_plan(goal, steps)
+            return JSONResponse({"ok": True, "plan": computer_agent.get_plan(plan.plan_id)})
+
+        @app.post("/api/pc_agent/execute")
+        async def pc_agent_execute_ep(req: Request):
+            from core.computer_agent import computer_agent
+            try:
+                b = await req.json()
+            except Exception:
+                b = {}
+            plan_id = b.get("plan_id")
+            goal = b.get("goal")
+            if plan_id:
+                res = computer_agent.execute_plan(plan_id)
+            elif goal:
+                res = computer_agent.execute_goal(goal, steps_data=b.get("steps"))
+            else:
+                return JSONResponse({"ok": False, "error": "Either plan_id or goal must be provided"}, status_code=400)
+            return JSONResponse(res)
+
+        @app.post("/api/pc_agent/permission")
+        async def pc_agent_permission_ep(req: Request):
+            from core.computer_agent import computer_agent
+            try:
+                b = await req.json()
+            except Exception:
+                b = {}
+            plan_id = b.get("plan_id", "")
+            step_id = int(b.get("step_id", 0))
+            confirmed = b.get("confirmed", False)
+            token = "CONFIRM" if confirmed else "DENY"
+            granted = computer_agent.grant_permission(plan_id, step_id, token)
+            if granted:
+                res = computer_agent.execute_plan(plan_id)
+                return JSONResponse({"ok": True, "granted": True, "execution": res})
+            return JSONResponse({"ok": False, "granted": False, "message": "Permission denied by operator"})
+
+        @app.post("/api/pc_agent/stop")
+        async def pc_agent_stop_ep(req: Request):
+            from core.computer_agent import computer_agent
+            try:
+                b = await req.json()
+            except Exception:
+                b = {}
+            plan_id = b.get("plan_id")
+            stopped = computer_agent.stop(plan_id)
+            return JSONResponse({"ok": True, "stopped": stopped, "message": "PC Agent execution halted by operator"})
+
+        @app.get("/api/pc_agent/audit")
+        async def pc_agent_audit_ep(req: Request, limit: int = 50):
+            from core.computer_agent import computer_agent
+            lines = computer_agent.get_recent_audit(limit=limit)
+            return JSONResponse({"ok": True, "audit": lines})
 
         @app.post("/api/logout")
         async def logout_ep(req: Request):
@@ -2521,61 +2624,90 @@ class DashboardServer:
 
         @app.post("/api/voice/preview")
         async def preview_voice_ep(req: Request):
-            """Synthesizes preview sample text for a requested voice persona."""
+            """Synthesizes preview sample text for a requested voice persona using NaturalVoiceEngine."""
             if not _auth(req):
                 return JSONResponse({"error": "Unauthorized"}, status_code=401)
             body = await req.json() if req.headers.get("content-length", "0") != "0" else {}
             voice_id = str(body.get("voice_id", "SWARA_HINDI")).strip()
-            from core.character_manager import character_manager
-            persona = character_manager.get_voice_persona(voice_id)
-            sample_text = persona.get("sample_text", "Hello, I am your voice assistant.") if persona else "Hello."
-            
-            is_neural = persona.get("is_neural", False) if persona else False
-            is_offline = persona.get("is_offline", False) if persona else False
-            system_voice = persona.get("system_voice", "hi-IN-SwaraNeural") if persona else "hi-IN-SwaraNeural"
-            
-            wav_bytes = None
-            if is_neural and not is_offline:
-                try:
-                    import io, wave, av, edge_tts, numpy as np
-                    comm = edge_tts.Communicate(text=sample_text, voice=system_voice)
-                    buf = bytearray()
-                    async for chunk in comm.stream():
-                        if chunk["type"] == "audio":
-                            buf.extend(chunk["data"])
-                    if len(buf) > 100:
-                        container = av.open(io.BytesIO(bytes(buf)))
-                        stream = container.streams.audio[0]
-                        frames = [f.to_ndarray() for f in container.decode(stream)]
-                        container.close()
-                        if frames:
-                            audio_data = np.concatenate(frames, axis=1)
-                            sample_rate = stream.rate
-                            audio_int16 = (np.clip(audio_data * 32767.0, -32768, 32767) if np.issubdtype(audio_data.dtype, np.floating) else audio_data).astype(np.int16)
-                            wav_io = io.BytesIO()
-                            with wave.open(wav_io, "wb") as wf:
-                                wf.setnchannels(audio_data.shape[0])
-                                wf.setsampwidth(2)
-                                wf.setframerate(sample_rate)
-                                wf.writeframes(audio_int16.T.reshape(-1).tobytes())
-                            wav_bytes = wav_io.getvalue()
-                except Exception as e:
-                    logging.getLogger("JARVIS.Server").warning(f"[VoicePreview] EdgeTTS failed: {e}")
+            custom_text = str(body.get("text", "")).strip()
 
-            if not wav_bytes:
-                from providers.tts_system import SystemTTS
-                sys_voice = "Microsoft Zira Desktop"
-                tts = SystemTTS({"voice": sys_voice, "rate": 0})
-                wav_bytes = await asyncio.to_thread(tts._synth_blocking, sample_text)
+            from core.character_manager import character_manager
+            from core.natural_voice_engine import natural_voice_engine
+
+            persona = character_manager.get_voice_persona(voice_id)
+            if not persona:
+                voice_id = "SWARA_HINDI"
+                persona = character_manager.get_voice_persona("SWARA_HINDI")
+
+            sample_text = custom_text or (persona.get("sample_text", "Hello, I am your voice assistant.") if persona else "Hello.")
+
+            res = await natural_voice_engine.synthesize_chunk_async(sample_text, voice_id=voice_id)
+            wav_bytes = res.audio_bytes_wav
 
             audio_id = self.store_audio(wav_bytes)
             return JSONResponse({
                 "ok": True,
                 "audio_id": audio_id,
-                "voice_id": voice_id,
+                "voice_id": res.voice_used,
                 "sample_text": sample_text,
+                "is_offline": res.is_offline,
+                "duration_sec": res.duration_sec,
+                "sample_rate": res.sample_rate,
                 "persona": persona,
             })
+
+        @app.get("/api/voice/always_on")
+        async def get_always_on_ep(req: Request):
+            """Returns current Always-On voice standby mode configuration and state."""
+            if not _auth(req):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            try:
+                from memory.config_manager import get_always_on_voice_enabled, get_push_to_talk_enabled
+                from core.wake_word import is_ready as wake_is_ready
+                from core.character_manager import character_manager
+                char = character_manager.get_character()
+                enabled = get_always_on_voice_enabled()
+                mode = getattr(char, "startup_voice_mode", "wake_word")
+                return JSONResponse({
+                    "ok": True,
+                    "always_on": enabled,
+                    "mode": mode,
+                    "wake_ready": wake_is_ready(),
+                    "ptt_enabled": get_push_to_talk_enabled(),
+                    "standby_phrases": ["Hey Jarvis", "Hello Jarvis"],
+                })
+            except Exception as e:
+                return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+        @app.post("/api/voice/always_on")
+        async def set_always_on_ep(req: Request):
+            """Updates Always-On voice standby mode preference and persists across restarts."""
+            if not _auth(req):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            body = await req.json() if req.headers.get("content-length", "0") != "0" else {}
+            enabled = bool(body.get("enabled", True))
+            try:
+                from memory.config_manager import save_always_on_voice_enabled, save_push_to_talk_enabled
+                from core.character_manager import character_manager
+                save_always_on_voice_enabled(enabled)
+                if enabled:
+                    save_push_to_talk_enabled(False)
+                char = character_manager.get_character()
+                char.startup_voice_mode = "wake_word" if enabled else "push_to_talk"
+                char.continuous_listening_opt_in = enabled
+                character_manager.save_character(char)
+                return JSONResponse({"ok": True, "always_on": enabled, "mode": char.startup_voice_mode})
+            except Exception as e:
+                return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+        @app.post("/api/voice/mute")
+        async def set_voice_mute_ep(req: Request):
+            """Hardware privacy mute toggle for microphone."""
+            if not _auth(req):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            body = await req.json() if req.headers.get("content-length", "0") != "0" else {}
+            muted = bool(body.get("muted", True))
+            return JSONResponse({"ok": True, "muted": muted})
 
         # ── Central Skill Registry & Voice Intent Endpoints ───────────────────
 

@@ -148,6 +148,27 @@ def save_push_to_talk_enabled(enabled: bool) -> None:
     _save_flag("push_to_talk_enabled", enabled)
 
 
+def get_always_on_voice_enabled() -> bool:
+    """Whether Always-On voice standby is active (consent-based, persistent across restarts)."""
+    cfg = load_api_keys()
+    if "always_on_voice_enabled" in cfg:
+        return bool(cfg["always_on_voice_enabled"])
+    if "wake_word_enabled" in cfg:
+        return bool(cfg["wake_word_enabled"])
+    try:
+        from core.character_manager import character_manager
+        char = character_manager.get_character()
+        return getattr(char, "startup_voice_mode", "wake_word") in ("wake_word", "hands_free") or getattr(char, "continuous_listening_opt_in", False)
+    except Exception:
+        return True
+
+
+def save_always_on_voice_enabled(enabled: bool) -> None:
+    """Persists Always-On voice standby preference across restarts."""
+    _save_flag("always_on_voice_enabled", enabled)
+    save_wake_word_enabled(enabled)
+
+
 HUD_STYLES = ("face", "core")
 
 

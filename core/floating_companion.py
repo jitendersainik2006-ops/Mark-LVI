@@ -445,3 +445,20 @@ def get_floating_companion(size: int = 140) -> Optional[FloatingCompanionWidget]
     if _COMPANION_INSTANCE is None:
         _COMPANION_INSTANCE = FloatingCompanionWidget(size=size)
     return _COMPANION_INSTANCE
+
+
+def main():
+    if not _PYQT_AVAILABLE:
+        print("[FloatingCompanion] PyQt6 is not available. Please install PyQt6.")
+        return
+    app = QApplication(sys.argv)
+    app.setApplicationName("JARVIS Floating Companion")
+    widget = FloatingCompanionWidget()
+    widget.show()
+    print("[FloatingCompanion] Widget displayed on screen.")
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()
+

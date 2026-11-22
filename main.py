@@ -35,11 +35,12 @@ for _stream in ("stdout", "stderr"):
 # ─────────────────────────────────────────────────────────────────────────────
 
 import asyncio
+import json
+import os
 import re
+import sys
 import threading
 import time
-import json
-import sys
 import traceback
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -722,8 +723,50 @@ class JarvisLive:
             from core.task_manager import task_manager
             def _run_task_action(action_name: str, args: dict):
                 ctx = {"player": self.ui, "speak": self.speak, "response": None, "session_memory": None}
+                act_norm = (action_name or "").strip().lower()
+
+                # 1. Action Registry (actions/*.py file-backed tools)
                 if self._action_registry.has(action_name):
                     return self._action_registry.run(action_name, args, ctx)
+
+                # 2. Multi-Agent Orchestrator Plan
+                if act_norm in ("orchestrator_plan", "execute_orchestrator_plan"):
+                    plan_id = args.get("plan_id") or args.get("id")
+                    if not plan_id:
+                        return "Error: plan_id is required for orchestrator_plan."
+                    from core.orchestrator import orchestrator
+                    return orchestrator.execute_plan(plan_id)
+
+                # 3. System Status / Telemetry (inline tool)
+                if act_norm in ("system_status", "system_get_metrics", "get_system_status"):
+                    from actions.system_monitor import get_system_status
+                    return get_system_status()
+
+                # 4. Computer-Use Agent / PC Agent
+                if act_norm in ("computer_agent", "computer_control", "pc_agent"):
+                    from core.computer_agent import computer_agent
+                    goal = args.get("goal") or args.get("command") or args.get("instruction") or "PC Automation Task"
+                    return computer_agent.execute_goal(goal, steps_data=args.get("steps"))
+
+                # 5. Central Skill Router
+                try:
+                    from core.skill_router import skill_router
+                    if skill_router.get_skill(action_name):
+                        return skill_router.execute_skill(action_name, args, confirmed=True)
+                except Exception as s_err:
+                    print(f"[JARVIS] SkillRouter task dispatch note: {s_err}")
+
+                # 6. Built-in low-risk action fallbacks
+                if act_norm == "web_search":
+                    from actions.web_search import search
+                    return search(args.get("query", ""))
+                elif act_norm in ("read_file", "summarize_file"):
+                    p = Path(args.get("path", ""))
+                    if p.exists():
+                        txt = p.read_text(encoding="utf-8", errors="ignore")
+                        return f"Read {len(txt)} chars from {p.name}"
+                    return f"File not found: {p}"
+
                 return f"Action '{action_name}' not found."
 
             task_manager.set_action_runner(_run_task_action)
@@ -738,15 +781,15 @@ class JarvisLive:
 
         # _awake gates the mic (see _listen_audio) and the background speakers.
         # It is True whenever wake word is OFF, so default behaviour is unchanged.
-        self._wake_enabled     = get_wake_word_enabled()
+        from memory.config_manager import get_always_on_voice_enabled
+        self._wake_enabled     = get_always_on_voice_enabled()
         self._awake            = not self._wake_enabled
         self._wake_detector: WakeWordDetector | None = None
         self._wake_sleep_timeout = WAKE_SLEEP_TIMEOUT
 
-        # Restore the saved push-to-talk preference. Doing it here rather than
-        # in __init__ means the hotkey thread only exists once there is a
-        # session to talk to.
-        if get_push_to_talk_enabled():
+        # Restore the saved push-to-talk preference. Push-to-Talk is an optional fallback;
+        # only enable if Always-On Wake Word is disabled.
+        if get_push_to_talk_enabled() and not self._wake_enabled:
             try:
                 self.set_push_to_talk(True)
             except Exception as e:
@@ -779,11 +822,14 @@ class JarvisLive:
         return True
 
     def _on_wake_detected(self) -> None:
-        """Called from the detector thread when 'Hey Jarvis' is heard."""
-        self.wake(reason="wake word")
+        """Called from the detector thread when 'Hey Jarvis' or 'Hello Jarvis' is heard."""
+        if not self.ui.muted:
+            self.ui.set_state("WAKE_DETECTED")
+        self.wake(reason="wake word detected")
 
     def wake(self, reason: str = "wake word") -> None:
         if self._awake:
+            self._last_user_speech = time.monotonic()
             return
         self._awake = True
         self._last_user_speech = time.monotonic()   # start the auto-sleep clock now
@@ -1125,6 +1171,11 @@ class JarvisLive:
                 self._engine.interrupt()
             except Exception:
                 pass
+        try:
+            from core.natural_voice_engine import natural_voice_engine
+            natural_voice_engine.stop_playback()
+        except Exception:
+            pass
         self.ui.write_log("SYS: Interrupted — listening...")
 
     def speak(self, text: str):
@@ -1453,8 +1504,7 @@ class JarvisLive:
                         except Exception:
                             pass
                     await asyncio.sleep(1.5)
-                    import os as _os
-                    _os._exit(0)
+                    os._exit(0)
                 asyncio.create_task(_do_shutdown())
 
             elif self._action_registry.has(name):
@@ -1532,13 +1582,18 @@ class JarvisLive:
         loop = asyncio.get_event_loop()
 
         def callback(indata, frames, time_info, status):
+            # ── Microphone Privacy Mute Gate ─────────────────────────────────
+            # While muted, zero audio is captured, processed, or fed to wake-word / speech pipelines.
+            if self.ui.muted:
+                return
+
             # ── Wake-word gate ───────────────────────────────────────────────
-            # While asleep, the mic audio NEVER goes to Gemini (nothing is
+            # While asleep / in standby, the mic audio NEVER goes to Gemini (nothing is
             # streamed, so JARVIS can't respond to speech not addressed to it and
             # nothing leaves the machine). Frames are instead handed to the local
             # detector, which runs its model in ITS OWN thread — the cost here is
             # only a queue push, so the audio path is never slowed. When wake word
-            # is off (default) or we're awake, this is a single boolean check.
+            # is off or we're awake, this is a single boolean check.
             if self._wake_enabled and not self._awake:
                 det = self._wake_detector
                 if det is not None:
@@ -1557,14 +1612,15 @@ class JarvisLive:
             # the echo of what we are playing right now", sustained long enough
             # that a cough or a keystroke cannot trigger it.
             if jarvis_speaking:
-                # Nothing is streamed while JARVIS talks.
-                #
-                # Interrupting by voice used to live here: `EchoGuard` can pick a
-                # user out from under our own echo, and `core/echo.py` still does
-                # that for the tail below. Re-enabling is small — classify each
-                # block here and call interrupt() after `required_blocks` of
-                # agreement — but it depends on the listener's room, so it stays
-                # out until it can be tried on real hardware.
+                try:
+                    mic_lvl = _pcm_level(indata)
+                    if mic_lvl >= 0.08:
+                        pcm_flat = indata.flatten()
+                        if self._echo.is_user_speech(pcm_flat, SEND_SAMPLE_RATE, mic_lvl):
+                            print("[JARVIS] 🗣️ Barge-in detected! User interrupted.")
+                            loop.call_soon_threadsafe(self.interrupt)
+                except Exception:
+                    pass
                 return
 
             # ── Echo tail ────────────────────────────────────────────────────
@@ -2690,7 +2746,7 @@ class JarvisLive:
                         self._ensure_wake_detector()
                         self._awake = False
                         self.ui.set_state("SLEEPING")
-                        self.ui.write_log("SYS: JARVIS online — sleeping. Say 'Hello Jarvis' or 'Hey Jarvis' to wake me.")
+                        self.ui.write_log("SYS: JARVIS online — Always-On Voice Active. Say 'Hello Jarvis' or 'Hey Jarvis' to speak.")
                     else:
                         self._awake = True
                         self.ui.set_state("LISTENING")

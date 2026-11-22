@@ -896,7 +896,7 @@ class HudCanvas(QWidget):
         # status text
         sy = _sy_status
         if self.muted:
-            txt, col = "⊘  MUTED",     qcol(C.MUTED_C)
+            txt, col = "⊘  MUTED (MIC PRIVACY ACTIVE)", qcol(C.MUTED_C)
         elif self.speaking:
             txt, col = "●  SPEAKING",  qcol(C.ACC)
         elif self.state == "THINKING":
@@ -905,9 +905,15 @@ class HudCanvas(QWidget):
         elif self.state == "PROCESSING":
             sym = "▷" if self._blink else "▶"
             txt, col = f"{sym}  PROCESSING", qcol(C.ACC2)
+        elif self.state == "WAKE_DETECTED":
+            sym = "★" if self._blink else "☆"
+            txt, col = f"{sym}  WAKE DETECTED", qcol(C.ACC)
         elif self.state == "LISTENING":
             sym = "●" if self._blink else "○"
             txt, col = f"{sym}  LISTENING",  qcol(C.GREEN)
+        elif self.state in ("SLEEPING", "STANDBY"):
+            sym = "◐" if self._blink else "◑"
+            txt, col = f"{sym}  ALWAYS-ON ACTIVE — SAY 'HEY JARVIS'", qcol(C.ACC2)
         else:
             sym = "●" if self._blink else "○"
             txt, col = f"{sym}  {self.state}", qcol(C.PRI)

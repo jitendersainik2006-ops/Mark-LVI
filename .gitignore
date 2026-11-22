@@ -28,7 +28,9 @@ scratch_test/
 uploads/
 downloads/
 screenshots/
+test_output/
 *.bak
+*.bak*
 *.tmp
 
 # ── Media & Render Outputs ───────────────────────────────────────────────────

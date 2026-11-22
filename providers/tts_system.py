@@ -533,3 +533,10 @@ def choices_for(field_key: str) -> tuple:
         return ()
     with _voice_lock:
         return tuple(_voice_cache) if _voice_cache is not None else ()
+
+
+def speak_to_wav(text: str, voice: str = "Microsoft Zira Desktop", rate: int = 0) -> bytes:
+    """Synthesizes text to WAV bytes via the operating system's native TTS."""
+    tts = SystemTTS({"voice": voice, "rate": rate})
+    return tts._synth_blocking(text)
+

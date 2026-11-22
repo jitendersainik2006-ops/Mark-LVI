@@ -386,7 +386,7 @@ class CharacterManager:
         },
         {
             "id": "ZIRA_OFFLINE",
-            "name": "Zira (Local Offline Windows SAPI5)",
+            "name": "Zira (English Offline Fallback - SAPI5)",
             "label": "Zira",
             "gender": "Female",
             "lang": "en-US",
@@ -394,7 +394,7 @@ class CharacterManager:
             "system_voice": "Microsoft Zira Desktop",
             "is_neural": False,
             "is_offline": True,
-            "description": "100% on-device offline voice. Instant zero-latency synthesis, guaranteed private and offline.",
+            "description": "100% on-device offline Windows voice for English. Uses phonetic Roman transliteration as emergency fallback for Hindi.",
             "sample_text": "System online. I am Zira, operating locally on your Windows machine with zero external network access.",
             "offline_fallback": "Microsoft Zira Desktop",
         },
@@ -642,6 +642,15 @@ class CharacterManager:
 
     def get_all_emotions(self) -> Dict[str, Dict[str, Any]]:
         return {k: asdict(v) for k, v in EMOTION_REGISTRY.items()}
+
+    def get_emotion_state(self, emotion_name: str) -> Optional[EmotionState]:
+        name_clean = str(emotion_name).strip().upper()
+        if name_clean == "WAKE_DETECTED":
+            return EMOTION_REGISTRY.get("LISTENING")
+        if name_clean == "STANDBY":
+            return EMOTION_REGISTRY.get("IDLE")
+        return EMOTION_REGISTRY.get(name_clean, EMOTION_REGISTRY.get("IDLE"))
+
 
     def get_presets(self) -> List[Dict[str, Any]]:
         return [
