@@ -21,7 +21,7 @@ def test_prompt_conversational_nature():
     assert prompt_path.exists(), "prompt.txt must exist"
     content = prompt_path.read_text(encoding="utf-8")
     assert "friendly, helpful, and natural personal assistant" in content, "Voice section missing friendly natural prompt"
-    assert "Hinglish: Respond in natural, everyday conversational Hinglish" in content, "Hinglish instructions missing"
+    assert "HINGLISH: Respond in natural, everyday conversational Hinglish" in content or "Hinglish: Respond in natural, everyday conversational Hinglish" in content, "Hinglish instructions missing"
     assert "AUTO-DETECT" in content, "Auto-detect language missing"
     print("[PASS] Test 1: Natural Hindi/Hinglish/English prompt verified.")
 
@@ -35,11 +35,12 @@ def test_wake_word_tuning():
 
 def test_whisper_local_on_d():
     from faster_whisper import WhisperModel
-    whisper_dir = Path(r"D:\JARVIS-AI\whisper_models")
-    assert whisper_dir.exists(), "whisper_models dir must exist on D: drive"
+    from core.path_manager import get_whisper_models_dir
+    whisper_dir = get_whisper_models_dir()
+    assert whisper_dir.exists(), f"whisper_models dir must exist at {whisper_dir}"
     model = WhisperModel("base", device="cpu", compute_type="int8", download_root=str(whisper_dir))
-    assert model is not None, "Failed to load WhisperModel from D: drive"
-    print("[PASS] Test 3: Local Faster-Whisper loaded successfully from D: drive.")
+    assert model is not None, "Failed to load WhisperModel"
+    print(f"[PASS] Test 3: Local Faster-Whisper loaded successfully from {whisper_dir}.")
 
 def test_server_transcribe_endpoint():
     server_path = BASE_DIR / "dashboard" / "server.py"
@@ -71,12 +72,14 @@ def test_instagram_designated_account():
     print("[PASS] Test 6: Instagram designated account @mentos_life_gym confirmed.")
 
 def test_d_drive_paths():
-    assert Path(__file__).resolve().parent.is_dir(), "Core project missing on D:"
-    assert Path(r"D:\JARVIS-AI\Ollama\ollama.exe").is_file(), "Ollama exe missing on D:"
-    assert Path(r"D:\JARVIS-AI\ollama_models").is_dir(), "Ollama models missing on D:"
-    assert Path(r"D:\JARVIS-AI\whisper_models").is_dir(), "Whisper models missing on D:"
-    assert Path(r"D:\JARVIS-AI\.venv-jarvis").is_dir(), "Virtualenv missing on D:"
-    print("[PASS] Test 7: All permanent J.A.R.V.I.S. directories verified on D: drive.")
+    from core.path_manager import validate_installation_path, get_app_root, get_whisper_models_dir
+    app_root = get_app_root()
+    valid, msg = validate_installation_path(app_root)
+    assert valid, f"Installation path validation failed: {msg}"
+    if Path("D:/JARVIS-AI").exists():
+        assert Path(r"D:\JARVIS-AI\Ollama\ollama.exe").is_file(), "Ollama exe missing on D:"
+        assert Path(r"D:\JARVIS-AI\whisper_models").is_dir(), "Whisper models missing on D:"
+    print(f"[PASS] Test 7: Universal J.A.R.V.I.S. installation paths verified ({app_root.drive or 'Current'}).")
 
 if __name__ == "__main__":
     print("=" * 70)

@@ -44,15 +44,22 @@ try:
 except Exception:
     pass
 
-BASE_DIR    = Path(__file__).resolve().parent.parent
+from core.path_manager import (
+    get_app_root,
+    get_config_dir,
+    get_data_dir,
+    get_whisper_models_dir,
+    validate_installation_path,
+)
+
+BASE_DIR    = get_app_root()
+DATA_DIR    = get_data_dir()
 
 # ── Drive Configuration & Portability Support ─────────────────────────────────
-# Dynamic install root discovery. Operates seamlessly on C:, D:, or any user drive.
-if os.environ.get("JARVIS_DEV_STRICT_D_DRIVE") == "1" and BASE_DIR.drive.upper() != "D:" and Path("D:/JARVIS-AI").exists():
-    raise RuntimeError(
-        f"[FATAL MIGRATION ERROR] On developer workstation with strict D: enforcement, J.A.R.V.I.S. must operate from D: drive. "
-        f"Active project root is currently '{BASE_DIR}'."
-    )
+# Dynamic install root discovery. Operates seamlessly on C:, D:, O:, or any user drive.
+_is_valid, _path_msg = validate_installation_path(BASE_DIR)
+if not _is_valid:
+    raise RuntimeError(f"[FATAL MIGRATION ERROR] {_path_msg}")
 
 STATIC_DIR  = Path(__file__).parent / "static"
 # The port people TYPE, and the port the app actually runs on.
@@ -4004,7 +4011,7 @@ a.btn {{ display:inline-block; margin-top:16px; padding:10px 20px; background:#2
                         tf.write(chunk)
                 
                 from memory.config_manager import get_provider_config
-                download_root = stt_cfg.get("download_root") or (str(BASE_DIR.parent / "whisper_models") if (BASE_DIR.parent / "whisper_models").is_dir() else r"D:\JARVIS-AI\whisper_models")
+                download_root = stt_cfg.get("download_root") or str(get_whisper_models_dir())
                 model_name = stt_cfg.get("model") or "base"
                 
                 from faster_whisper import WhisperModel
@@ -4129,7 +4136,7 @@ a.btn {{ display:inline-block; margin-top:16px; padding:10px 20px; background:#2
                     return JSONResponse({"error": "Unauthorized"}, status_code=401)
                 from core.knowledge_manager import knowledge_manager
                 safe = _safe_filename(file.filename or "document")
-                docs_dir = BASE_DIR / "data" / "knowledge" / "documents"
+                docs_dir = DATA_DIR / "knowledge" / "documents"
                 docs_dir.mkdir(parents=True, exist_ok=True)
                 dest = docs_dir / safe
                 try:
@@ -4916,7 +4923,7 @@ a.btn {{ display:inline-block; margin-top:16px; padding:10px 20px; background:#2
         # ── 12. MULTI-DEVICE MANAGEMENT API ──────────────────────────────────
         @app.get("/api/devices")
         async def list_paired_devices_ep(req: Request):
-            dev_file = BASE_DIR / "data" / "paired_devices.json"
+            dev_file = DATA_DIR / "paired_devices.json"
             devices = []
             if dev_file.exists():
                 try:
@@ -4955,7 +4962,7 @@ a.btn {{ display:inline-block; margin-top:16px; padding:10px 20px; background:#2
 
         @app.post("/api/devices/{device_id}/revoke")
         async def revoke_paired_device_ep(device_id: str, req: Request):
-            dev_file = BASE_DIR / "data" / "paired_devices.json"
+            dev_file = DATA_DIR / "paired_devices.json"
             if dev_file.exists():
                 try:
                     devices = json.loads(dev_file.read_text(encoding="utf-8"))

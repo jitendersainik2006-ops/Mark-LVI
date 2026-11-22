@@ -34,9 +34,13 @@ Choose either **Method A** (Standard Installer) or **Method B** (Portable Archiv
 
 ### Option B: Portable Package (Zero Admin Privileges Required)
 1. Locate **`JARVIS_Mark_LVI_Windows_x64_Portable.zip`**.
-2. Right-click the `.zip` archive and select **Extract All...** to any folder (e.g. `C:\JARVIS` or `D:\JARVIS`).
+2. Right-click the `.zip` archive and select **Extract All...** to any folder or drive (e.g. `O:\JARVIS_Mark_LVI`, `C:\JARVIS`, or `D:\JARVIS`).
 3. Open the extracted folder and double-click **`install_jarvis.bat`**.
    - This runs the first-run hardware probe, validates audio devices, and creates desktop shortcuts.
+
+> [!NOTE]
+> **Universal Drive Support (C:, D:, O:):**
+> J.A.R.V.I.S. MARK LVI now features dynamic path resolution. Whether installed into `O:\JARVIS_Mark_LVI` (Sir's secondary drive) or `C:\Program Files\JARVIS Mark LVI`, all background daemons, speech models, and data directories initialize seamlessly without requiring a hardcoded D: drive.
 
 ---
 

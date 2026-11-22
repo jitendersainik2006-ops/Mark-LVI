@@ -93,26 +93,25 @@ from core.wake_word            import (
 # again (wake-word mode only). 10 seconds provides a natural follow-up window.
 WAKE_SLEEP_TIMEOUT = 10.0   # seconds: conversational follow-up window
 
-def get_base_dir():
-    if getattr(sys, "frozen", False):
-        return Path(sys.executable).parent
-    return Path(__file__).resolve().parent
+from core.path_manager import (
+    get_app_root,
+    get_config_dir,
+    get_data_dir,
+    validate_installation_path,
+)
 
-BASE_DIR        = get_base_dir()
+BASE_DIR = get_app_root()
 
 # ── Portability & Drive Configuration ──────────────────────────────────────────
-# Dynamic install root discovery. Operates seamlessly on C:, D:, or any user drive.
-if os.environ.get("JARVIS_DEV_STRICT_D_DRIVE") == "1" and BASE_DIR.drive.upper() != "D:" and Path("D:/JARVIS-AI").exists():
+# Dynamic install root discovery. Operates seamlessly on C:, D:, O:, or any user drive.
+_is_valid, _path_msg = validate_installation_path(BASE_DIR)
+if not _is_valid:
     import logging
-    _err = (
-        f"[FATAL MIGRATION ERROR] On developer workstation with strict D: enforcement, J.A.R.V.I.S. must operate from D: drive. "
-        f"Active project root is currently '{BASE_DIR}'."
-    )
-    logging.critical(_err)
-    print(_err, file=sys.stderr)
-    raise RuntimeError(_err)
+    logging.critical(f"[FATAL MIGRATION ERROR] {_path_msg}")
+    print(f"[FATAL MIGRATION ERROR] {_path_msg}", file=sys.stderr)
+    raise RuntimeError(_path_msg)
 
-API_CONFIG_PATH = BASE_DIR / "config" / "api_keys.json"
+API_CONFIG_PATH = get_config_dir() / "api_keys.json"
 PROMPT_PATH     = BASE_DIR / "core" / "prompt.txt"
 # The conversation's model. A NAME, not a decision: the ladder lives in
 # core/gemini.py and this is only whichever rung is currently in use, kept here

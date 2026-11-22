@@ -37,9 +37,13 @@ for stream in (sys.stdout, sys.stderr):
 BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
-CONFIG_DIR = BASE_DIR / "config"
+
+from core.path_manager import get_app_root, get_config_dir, get_data_dir
+
+BASE_DIR = get_app_root()
+CONFIG_DIR = get_config_dir()
 CONFIG_FILE = CONFIG_DIR / "api_keys.json"
-DATA_DIR = BASE_DIR / "data"
+DATA_DIR = get_data_dir()
 
 
 def print_banner():

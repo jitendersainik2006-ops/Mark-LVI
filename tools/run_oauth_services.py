@@ -20,18 +20,20 @@ import threading
 import time
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-if str(BASE_DIR) not in sys.path:
-    sys.path.insert(0, str(BASE_DIR))
+from core.path_manager import get_app_root, get_data_dir, validate_installation_path
 
-# Drive Portability Check
-if os.environ.get("JARVIS_DEV_STRICT_D_DRIVE") == "1" and BASE_DIR.drive.upper() != "D:" and Path("D:/JARVIS-AI").exists():
-    raise RuntimeError(f"Must run from D: drive on developer machine. Current: {BASE_DIR}")
+BASE_DIR = get_app_root()
+DATA_DIR = get_data_dir()
+
+# Universal Portability Validation across C:, D:, O:, etc.
+_is_valid, _path_msg = validate_installation_path(BASE_DIR)
+if not _is_valid:
+    raise RuntimeError(f"[FATAL MIGRATION ERROR] {_path_msg}")
 
 # Skip UAC firewall elevation in automated/headless mode
 os.environ["JARVIS_SKIP_FIREWALL_PROMPT"] = "1"
 
-LOG_FILE = BASE_DIR / "data" / "oauth_services.log"
+LOG_FILE = DATA_DIR / "oauth_services.log"
 LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 file_handler = logging.FileHandler(str(LOG_FILE), mode="a", encoding="utf-8")

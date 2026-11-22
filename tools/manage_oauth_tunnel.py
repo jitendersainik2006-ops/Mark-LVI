@@ -36,17 +36,26 @@ for stream in (sys.stdout, sys.stderr):
         except Exception:
             pass
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+from core.path_manager import (
+    get_app_root,
+    get_cloudflared_path,
+    get_data_dir,
+    get_python_path,
+)
+
+BASE_DIR = get_app_root()
+DATA_DIR = get_data_dir()
 
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 from core.meta_oauth import meta_oauth
 
-CLOUDFLARED_BIN = (BASE_DIR.parent / "tools" / "cloudflared.exe") if (BASE_DIR.parent / "tools" / "cloudflared.exe").is_file() else Path(r"D:\JARVIS-AI\tools\cloudflared.exe")
+_cf_bin = get_cloudflared_path()
+CLOUDFLARED_BIN = _cf_bin if _cf_bin else (BASE_DIR / "tools" / "cloudflared.exe")
 PROXY_SCRIPT = BASE_DIR / "tools" / "oauth_callback_proxy.py"
 SERVER_SCRIPT = BASE_DIR / "dashboard" / "server.py"
-TUNNEL_STATE_FILE = BASE_DIR / "data" / "active_tunnel.json"
+TUNNEL_STATE_FILE = DATA_DIR / "active_tunnel.json"
 
 PROXY_PORT = 8005
 BACKEND_PORT = 8000
@@ -63,8 +72,9 @@ def start_backend_if_needed() -> subprocess.Popen | None:
         print(f"[Orchestrator] J.A.R.V.I.S. backend is already listening on port {BACKEND_PORT}.")
         return None
     print(f"[Orchestrator] Starting J.A.R.V.I.S. backend server on port {BACKEND_PORT}...")
+    py_bin = get_python_path()
     proc = subprocess.Popen(
-        [sys.executable, str(SERVER_SCRIPT)],
+        [py_bin, str(SERVER_SCRIPT)],
         cwd=str(BASE_DIR),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -82,8 +92,9 @@ def start_proxy_if_needed() -> subprocess.Popen | None:
         print(f"[Orchestrator] Callback proxy is already listening on port {PROXY_PORT}.")
         return None
     print(f"[Orchestrator] Starting hardened callback proxy on port {PROXY_PORT}...")
+    py_bin = get_python_path()
     proc = subprocess.Popen(
-        [sys.executable, str(PROXY_SCRIPT)],
+        [py_bin, str(PROXY_SCRIPT)],
         cwd=str(BASE_DIR),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

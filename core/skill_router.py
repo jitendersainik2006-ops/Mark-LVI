@@ -1035,7 +1035,8 @@ class SkillRouter:
     def _handle_system_status(self, params: dict) -> dict:
         import psutil
         active_drive = Path(__file__).resolve().anchor
-        disk = psutil.disk_usage(active_drive if Path(active_drive).exists() else ("D:\\" if Path("D:\\").exists() else "C:\\"))
+        target_drive = active_drive if Path(active_drive).exists() else (Path(sys.executable).anchor if Path(Path(sys.executable).anchor).exists() else "C:\\")
+        disk = psutil.disk_usage(target_drive)
         cpu = psutil.cpu_percent(interval=0.1)
         vm = psutil.virtual_memory()
         

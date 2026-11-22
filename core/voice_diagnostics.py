@@ -24,15 +24,16 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger("JARVIS.VoiceDiagnostics")
 
 
-def get_base_dir() -> Path:
-    if getattr(sys, "frozen", False):
-        return Path(sys.executable).parent
-    return Path(__file__).resolve().parent.parent
+from core.path_manager import (
+    get_app_root,
+    get_data_dir,
+    get_whisper_models_dir,
+    get_ollama_path,
+)
 
-
-BASE_DIR = get_base_dir()
-DATA_DIR = BASE_DIR / "data"
-WHISPER_MODELS_DIR = (BASE_DIR.parent / "whisper_models") if (BASE_DIR.parent / "whisper_models").exists() else (BASE_DIR / "whisper_models")
+BASE_DIR = get_app_root()
+DATA_DIR = get_data_dir()
+WHISPER_MODELS_DIR = get_whisper_models_dir()
 
 
 class VoiceDiagnosticsEngine:
@@ -238,7 +239,8 @@ class VoiceDiagnosticsEngine:
         if audio_devs["status"] != "OK":
             recommendations.append("Verify default microphone and speakers in Windows Sound Settings.")
         if llm["status"] != "OK":
-            recommendations.append("Ensure Ollama is running (`D:\\JARVIS-AI\\Ollama\\ollama.exe serve`) and model `qwen2.5:3b` is pulled.")
+            ollama_exe = get_ollama_path() or "ollama"
+            recommendations.append(f"Ensure Ollama is running (`{ollama_exe} serve`) and model `qwen2.5:3b` is pulled.")
         if stt["status"] != "OK":
             recommendations.append(f"Ensure local Whisper model weights are placed in `{WHISPER_MODELS_DIR}`.")
 

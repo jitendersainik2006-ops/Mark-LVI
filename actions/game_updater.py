@@ -87,7 +87,7 @@ def _find_steam_windows() -> Path | None:
     for p in [
         Path(os.environ.get("ProgramFiles(x86)", "")) / "Steam",
         Path(os.environ.get("ProgramFiles", ""))       / "Steam",
-        Path("C:/Steam"), Path("D:/Steam"), Path("E:/Steam"), Path("F:/Steam"),
+        Path("C:/Steam"), Path("D:/Steam"), Path("E:/Steam"), Path("F:/Steam"), Path("O:/Steam"),
     ]:
         if p.exists() and (p / "steam.exe").exists():
             return p
