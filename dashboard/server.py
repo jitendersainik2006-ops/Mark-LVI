@@ -1243,10 +1243,17 @@ class DashboardServer:
         @app.get("/health")
         @app.get("/api/system/health")
         async def health_check():
+            ver = "56.1.0"
+            ver_file = BASE_DIR / "config" / "version.json"
+            if ver_file.exists():
+                try:
+                    ver = json.loads(ver_file.read_text(encoding="utf-8")).get("version", ver)
+                except Exception:
+                    pass
             return {
                 "status": "healthy",
                 "app": "J.A.R.V.I.S. MARK LVI",
-                "version": "56.0.0",
+                "version": ver,
                 "dashboard": "online",
                 "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
             }

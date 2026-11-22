@@ -2,7 +2,7 @@
 ; Builds: JARVIS_Mark_LVI_Setup.exe
 
 #define MyAppName "J.A.R.V.I.S. Mark LVI Core"
-#define MyAppVersion "56.2.0"
+#define MyAppVersion "56.1.0"
 #define MyAppPublisher "Black Intel"
 #define MyAppURL "http://127.0.0.1:8000/app"
 #define MyAppExeName "launch_jarvis.bat"

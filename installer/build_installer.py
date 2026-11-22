@@ -101,13 +101,13 @@ def build_release_package() -> dict:
         shutil.copy2(BASE_DIR / "config" / "cloudflared_named_tunnel.yml", dst_cfg / "cloudflared_named_tunnel.yml")
     # Release version record
     ver_data = {
-        "version": "56.3.0",
-        "codename": "Unified-Humanlike-AI-Companion-Master",
-        "release_name": "J.A.R.V.I.S. Mark LVI Unified Companion Release",
-        "release_date": "2026-11-21",
+        "version": "56.1.0",
+        "codename": "Post-Release-Defect-Fixed-Companion",
+        "release_name": "J.A.R.V.I.S. Mark LVI Master Release v56.1.0",
+        "release_date": "2026-11-22",
     }
     (dst_cfg / "version.json").write_text(json.dumps(ver_data, indent=2), encoding="utf-8")
-    print("  ✓ Created config/version.json (v56.3.0 Unified-Humanlike-AI-Companion-Master)")
+    print("  ✓ Created config/version.json (v56.1.0 Post-Release-Defect-Fixed-Companion)")
 
     # 3. Data folder skeleton
     dst_data = RELEASE_DIR / "data"
