@@ -14,7 +14,7 @@
 ## 🌟 KEY CAPABILITIES & FEATURES
 
 ### 1. Natural Conversational Voice & Real-Time Barge-In
-- **Indian & Global Neural Voices:** Default **Swara (Hindi Neural)**, plus Radhika, Ananya, Kabir, and Aarav.
+- **5 Verified Female Voice Personas:** Default **Swara (Warm Hindi & Hinglish Neural)**, **Neerja (Fluent Indian English Neural)**, **Ava (Modern US English Neural)**, **Sonia (Polished British English Neural)**, and **Zira (Local Offline Windows SAPI5)**.
 - **Client-Side Speech Barge-In:** Immediate audio stream cancellation the millisecond the user begins speaking, delivering fluid human-like turn-taking.
 - **Phonetic Pronunciation Dictionary:** Rules in `config/pronunciation_rules.json` guarantee precise phonetics for Indian names, greetings, and technical terminology across Hindi, Hinglish, and English.
 - **Listening Modes:** 4 switchable modes: **Hands-Free**, **Wake-Word ("Hey Jarvis")**, **Push-to-Talk**, and **Privacy Mute**.
@@ -51,13 +51,13 @@
 
 ---
 
-## 💾 OFFICIAL DOWNLOADS & RELEASES (v56.0.0)
+## 💾 OFFICIAL DOWNLOADS & RELEASES (v56.1.0 Defect-Fixed Release)
 
 | Package | Format | Size | SHA-256 Checksum |
 | :--- | :--- | :--- | :--- |
-| **Windows Installer** | [.exe (Setup)](https://github.com/jitendersainik2006-ops/Mark-LVI/releases/download/v56.0.0/JARVIS_Mark_LVI_Setup.exe) | 2.89 MB | `fe08b3ee64c90e03d8d6c7189b0ebfbe6d8f07c718332d9a28943b661535b4d7` |
-| **Portable Package** | [.zip (Standalone)](https://github.com/jitendersainik2006-ops/Mark-LVI/releases/download/v56.0.0/JARVIS_Mark_LVI_Windows_x64_Portable.zip) | 1.16 MB | `5d005a9d81b90c3b543d6c8e13e7676fb54d939d24c47c4fb46459a5d8245f16` |
-| **Package Manifest** | [.txt (Manifest)](https://github.com/jitendersainik2006-ops/Mark-LVI/releases/download/v56.0.0/SHA256_MANIFEST.txt) | 19.6 KB | `9c374d5a3093de0f8b23bd6cb009de6dc2135f52315f9e9a6943ffb8efe26681` |
+| **Windows Installer** | [.exe (Setup)](https://github.com/jitendersainik2006-ops/Mark-LVI/releases/download/v56.1.0/JARVIS_Mark_LVI_Setup.exe) | 2.89 MB | `b174f6c9adb8ae02465a99b632e62a0ceef882d490b67d1ff6b3f3d99397e2ae` |
+| **Portable Package** | [.zip (Standalone)](https://github.com/jitendersainik2006-ops/Mark-LVI/releases/download/v56.1.0/JARVIS_Mark_LVI_Windows_x64_Portable.zip) | 1.16 MB | `0c5602c2c0334463fb3105f08f3e244c638c93ec82b90ef046350f500586cbbb` |
+| **Package Manifest** | [.txt (Manifest)](https://github.com/jitendersainik2006-ops/Mark-LVI/releases/download/v56.1.0/SHA256_MANIFEST.txt) | 21.0 KB | `6fbfeb765cc06d7a837c774a266168085b06490e2a7c527faafd7398e11a6f60` |
 
 ---
 
@@ -72,10 +72,10 @@
 
 ### One-Click Setup
 1. Extract or clone this repository to any directory (e.g. `C:\JARVIS-AI` or `D:\JARVIS-AI`).
-2. Double-click **`install_jarvis.bat`**.
+2. Double-click **`install_jarvis.bat`** or run **`JARVIS_Mark_LVI_Setup.exe`**.
 3. The Setup Wizard will detect hardware, verify audio devices, initialize local databases, and create Desktop shortcuts.
 4. Launch J.A.R.V.I.S. from your Desktop shortcut or run **`launch_jarvis.bat`**.
-5. Open your browser at **`http://127.0.0.1:8000/app`**.
+5. The Modern Companion dashboard automatically opens in your default browser at **`http://127.0.0.1:8000/app`**.
 
 ---
 

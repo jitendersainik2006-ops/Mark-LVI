@@ -24,9 +24,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-# Enforce D: drive permanently
-if BASE_DIR.drive.upper() != "D:":
-    raise RuntimeError(f"Must run from D: drive. Current: {BASE_DIR}")
+# Drive Portability Check
+if os.environ.get("JARVIS_DEV_STRICT_D_DRIVE") == "1" and BASE_DIR.drive.upper() != "D:" and Path("D:/JARVIS-AI").exists():
+    raise RuntimeError(f"Must run from D: drive on developer machine. Current: {BASE_DIR}")
 
 # Skip UAC firewall elevation in automated/headless mode
 os.environ["JARVIS_SKIP_FIREWALL_PROMPT"] = "1"

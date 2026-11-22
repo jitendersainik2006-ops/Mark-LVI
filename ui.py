@@ -6919,6 +6919,8 @@ class MainWindow(QMainWindow):
                 pipe = providers.get("pipeline", {})
                 if isinstance(pipe, dict) and pipe.get("llm"):
                     return True
+            if d.get("llm_provider") in ("ollama", "offline", "local") and d.get("os_system"):
+                return True
             return bool(d.get("gemini_api_key")) and bool(d.get("os_system"))
         except Exception:
             return False

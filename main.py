@@ -99,12 +99,13 @@ def get_base_dir():
 
 BASE_DIR        = get_base_dir()
 
-# ── Enforce D: Drive Permanently ──────────────────────────────────────────────
-if BASE_DIR.drive.upper() != "D:":
+# ── Portability & Drive Configuration ──────────────────────────────────────────
+# Dynamic install root discovery. Operates seamlessly on C:, D:, or any user drive.
+if os.environ.get("JARVIS_DEV_STRICT_D_DRIVE") == "1" and BASE_DIR.drive.upper() != "D:" and Path("D:/JARVIS-AI").exists():
     import logging
     _err = (
-        f"[FATAL MIGRATION ERROR] J.A.R.V.I.S. must operate exclusively from D: drive. "
-        f"Active project root is currently '{BASE_DIR}'. Execution aborted to prevent writing to {BASE_DIR.drive}."
+        f"[FATAL MIGRATION ERROR] On developer workstation with strict D: enforcement, J.A.R.V.I.S. must operate from D: drive. "
+        f"Active project root is currently '{BASE_DIR}'."
     )
     logging.critical(_err)
     print(_err, file=sys.stderr)

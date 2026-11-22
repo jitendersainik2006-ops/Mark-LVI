@@ -57,6 +57,40 @@ REPORT = {
 }
 
 
+def ensure_server_running():
+    import socket
+    s = socket.socket()
+    try:
+        s.connect(("127.0.0.1", 8000))
+        s.close()
+        print("[Audit] Dashboard server already listening on 127.0.0.1:8000.")
+        return None
+    except Exception:
+        s.close()
+
+    print("[Audit] Starting background DashboardServer on port 8000...")
+    import threading
+    from dashboard.server import DashboardServer
+
+    srv = DashboardServer()
+    t = threading.Thread(target=lambda: asyncio.run(srv.serve()), daemon=True)
+    t.start()
+
+    # Wait up to 15 seconds for port to open
+    for _ in range(30):
+        time.sleep(0.5)
+        s = socket.socket()
+        try:
+            s.connect(("127.0.0.1", 8000))
+            s.close()
+            print("[Audit] ✓ DashboardServer online and accepting connections on 127.0.0.1:8000.")
+            return srv
+        except Exception:
+            s.close()
+    print("[Audit] ⚠️ Warning: Timed out waiting for dashboard on port 8000.")
+    return srv
+
+
 def http_get(path: str) -> tuple[int, dict | str]:
     url = f"http://127.0.0.1:8000{path}"
     try:
@@ -362,7 +396,8 @@ def audit_5_document_intelligence():
         REPORT["summary"]["implemented_and_demonstrated"].append(
             "Document Intelligence: Semantic chunking, TF-IDF indexing, and verifiable citation retrieval demonstrated live"
         )
-    print(f"  Result: {'PASS' if success else 'FAIL'} | Chunks: {src.chunk_count} | Fact Retrieved: {'45,000 m/s' in citation_text} | API Citations: {len(api_res.get('citations', []))}")
+    cit_cnt = len(api_res.get('citations', [])) if isinstance(api_res, dict) else 0
+    print(f"  Result: {'PASS' if success else 'FAIL'} | Chunks: {src.chunk_count} | Fact Retrieved: {'45,000 m/s' in citation_text} | API Citations: {cit_cnt}")
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -770,6 +805,7 @@ def main():
     print("  J.A.R.V.I.S. MARK LVI — COMPREHENSIVE REAL-WORLD ACCEPTANCE AUDIT")
     print("=" * 80)
 
+    srv = ensure_server_running()
     audit_1_dashboard_and_modules()
     audit_2_audio_and_conversational_ai()
     audit_3_five_voice_synthesis()

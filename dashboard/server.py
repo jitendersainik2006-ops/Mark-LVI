@@ -30,6 +30,7 @@ _DEPS_OK = False
 try:
     from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
     from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response, StreamingResponse
+    from fastapi.staticfiles import StaticFiles
     import uvicorn
     _DEPS_OK = True
 except ImportError:
@@ -1226,6 +1227,10 @@ class DashboardServer:
 
             return await call_next(request)
 
+        # Mount static directory for JS, CSS, and asset files
+        if STATIC_DIR.exists():
+            app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
         @app.get("/static/jarvis_design_tokens.css")
         async def design_tokens_css():
             try:
@@ -1233,6 +1238,29 @@ class DashboardServer:
             except Exception:
                 css_content = ""
             return Response(content=css_content, media_type="text/css")
+
+        @app.get("/api/health")
+        @app.get("/health")
+        @app.get("/api/system/health")
+        async def health_check():
+            return {
+                "status": "healthy",
+                "app": "J.A.R.V.I.S. MARK LVI",
+                "version": "56.0.0",
+                "dashboard": "online",
+                "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
+            }
+
+        @app.exception_handler(404)
+        async def custom_404_handler(request: Request, exc: Exception):
+            accept = request.headers.get("accept", "")
+            if "text/html" in accept:
+                from fastapi.responses import RedirectResponse
+                return RedirectResponse(url="/app", status_code=302)
+            return JSONResponse(
+                status_code=404,
+                content={"detail": "Not Found", "path": request.url.path}
+            )
 
         @app.get("/login", response_class=HTMLResponse)
         async def login_page():
@@ -1245,6 +1273,11 @@ class DashboardServer:
         @app.get("/", response_class=HTMLResponse)
         @app.get("/app", response_class=HTMLResponse)
         @app.get("/app/", response_class=HTMLResponse)
+        @app.get("/dashboard", response_class=HTMLResponse)
+        @app.get("/dashboard/", response_class=HTMLResponse)
+        @app.get("/index", response_class=HTMLResponse)
+        @app.get("/index.html", response_class=HTMLResponse)
+        @app.get("/home", response_class=HTMLResponse)
         async def index():
             # Auth is handled client-side via sessionStorage bearer token.
             # Server-side header auth can't work here because browser navigations
@@ -2452,6 +2485,31 @@ class DashboardServer:
                     "voice_pitch": getattr(char, "voice_pitch", "+0Hz"),
                     "voice_volume": getattr(char, "voice_volume", 1.0),
                 }
+            })
+
+        @app.post("/api/voice/select")
+        async def select_voice_ep(req: Request):
+            """Persistently selects and activates one of the 5 female voice profiles."""
+            if not _auth(req):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            body = await req.json() if req.headers.get("content-length", "0") != "0" else {}
+            voice_id = str(body.get("voice_id", "SWARA_HINDI")).strip()
+            user_id = str(body.get("user_id", "")).strip() or None
+            from core.character_manager import character_manager
+            persona = character_manager.get_voice_persona(voice_id)
+            char = character_manager.get_character(user_id)
+            char.voice_persona = persona.get("id", "SWARA_HINDI")
+            if "voice_speed" in body:
+                try:
+                    char.voice_speed = float(body["voice_speed"])
+                except Exception:
+                    pass
+            saved = character_manager.save_character(char, user_id)
+            return JSONResponse({
+                "ok": saved,
+                "voice_id": char.voice_persona,
+                "persona": persona,
+                "character": char.to_dict()
             })
 
         @app.post("/api/voice/preview")
