@@ -605,9 +605,13 @@
                   <option value="AVA_MODERN_EN">Ava — Expressive Modern US English Neural</option>
                   <option value="SONIA_BRITISH_EN">Sonia — Polished British English Neural</option>
                   <option value="ZIRA_OFFLINE">Zira — English Offline Fallback (Windows SAPI5)</option>
+                  <option value="MADISON_FINEVOICE">Madison — FineVoice Expressive English (Direct TTS & Conversion)</option>
                 </select>
                 <div style="display:flex; gap:8px; margin-top:8px;">
                   <button class="ui-btn" style="flex:1; padding:6px 12px; font-size:11px; background:var(--accent-purple-soft); border:1px solid var(--accent-purple); color:var(--text-primary);" onclick="previewSelectedVoice()">▶️ Test Voice Sample</button>
+                </div>
+                <div id="lounge-finevoice-info" style="display:none; margin-top:6px; font-size:11px; color:var(--accent-gold); background:rgba(245,158,11,0.1); padding:6px 8px; border-radius:6px; border:1px solid rgba(245,158,11,0.25);">
+                  ✨ <b>FineVoice Cloud:</b> Direct TTS & Conversion. Falls back to Ava Neural / Zira if API key unconfigured.
                 </div>
               </div>
               <div style="margin-top:auto; background:rgba(0,0,0,0.25); border-radius:8px; padding:10px; font-size:11px; color:var(--text-secondary); line-height:1.4;">
@@ -1191,7 +1195,11 @@
                 <option value="AVA_MODERN_EN">Ava — Expressive Modern US English Neural</option>
                 <option value="SONIA_BRITISH_EN">Sonia — Polished British English Neural</option>
                 <option value="ZIRA_OFFLINE">Zira — English Offline Fallback (Windows SAPI5)</option>
+                <option value="MADISON_FINEVOICE">Madison — FineVoice Expressive English (Direct TTS & Conversion)</option>
               </select>
+              <div id="char-finevoice-info" style="display:none; font-size:11px; color:var(--accent-gold); background:rgba(245,158,11,0.1); padding:8px 10px; border-radius:6px; border:1px solid rgba(245,158,11,0.25);">
+                ✨ <b>FineVoice Madison:</b> American English AI Voice Model. Supports Direct TTS & Voice Conversion. If API key is not configured, automatically routes through Ava Neural / Zira SAPI5 fallback.
+              </div>
               <div>
                 <button class="ui-btn" onclick="previewSelectedVoice()">▶️ Preview Voice</button>
               </div>
@@ -1767,6 +1775,13 @@
       if (loungeSel) loungeSel.value = voiceId;
       if (charSel) charSel.value = voiceId;
       localStorage.setItem('jarvis_voice_persona', voiceId);
+
+      const isFine = (voiceId === 'MADISON_FINEVOICE');
+      const lInfo = document.getElementById('lounge-finevoice-info');
+      const cInfo = document.getElementById('char-finevoice-info');
+      if (lInfo) lInfo.style.display = isFine ? 'block' : 'none';
+      if (cInfo) cInfo.style.display = isFine ? 'block' : 'none';
+
       try {
         const res = await fetch('/api/voice/select', {
           method: 'POST',
@@ -1803,7 +1818,11 @@
           const audioUrl = `/api/audio/${d.audio_id}`;
           _previewAudio = new Audio(audioUrl);
           _previewAudio.play().then(() => {
-            showToast(`Playing sample audio for ${voiceId}`);
+            if (d.is_fallback) {
+              showToast(`Playing sample audio for ${voiceId} (Fallback: ${d.fallback_reason || 'Ava Neural'})`);
+            } else {
+              showToast(`Playing sample audio for ${voiceId}`);
+            }
             setAssistantState('SPEAKING');
             _previewAudio.onended = () => setAssistantState('IDLE');
           }).catch(e => {
@@ -1829,6 +1848,12 @@
           if (loungeSel) loungeSel.value = activeId;
           if (charSel) charSel.value = activeId;
           localStorage.setItem('jarvis_voice_persona', activeId);
+
+          const isFine = (activeId === 'MADISON_FINEVOICE');
+          const lInfo = document.getElementById('lounge-finevoice-info');
+          const cInfo = document.getElementById('char-finevoice-info');
+          if (lInfo) lInfo.style.display = isFine ? 'block' : 'none';
+          if (cInfo) cInfo.style.display = isFine ? 'block' : 'none';
         }
 
         // Query Always-On Voice Mode status

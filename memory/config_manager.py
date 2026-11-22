@@ -55,6 +55,31 @@ def load_api_keys() -> dict:
 def get_gemini_key() -> str | None:
     return load_api_keys().get("gemini_api_key")
 
+def get_finevoice_key() -> str | None:
+    """Return configured FineVoice API key from config/api_keys.json or environment."""
+    import os
+    env_k = os.environ.get("FINEVOICE_API_KEY", "").strip()
+    if env_k:
+        return env_k
+    val = load_api_keys().get("finevoice_api_key")
+    if isinstance(val, str) and val.strip():
+        val = val.strip()
+        if val.startswith("dpapi:v1:"):
+            try:
+                from core.crypto_storage import decrypt_token
+                val = decrypt_token(val)
+            except Exception:
+                pass
+        return val
+    return None
+
+def set_finevoice_key(api_key: str) -> None:
+    """Safely saves FineVoice API key to config/api_keys.json."""
+    ensure_config_dir()
+    data: dict = load_api_keys()
+    data["finevoice_api_key"] = api_key.strip()
+    CONFIG_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
 def is_configured() -> bool:
     key = get_gemini_key()
     if bool(key and len(key) > 15):

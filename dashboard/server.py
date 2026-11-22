@@ -2588,14 +2588,14 @@ class DashboardServer:
 
         @app.get("/api/voice/personas")
         async def get_voice_personas_ep(req: Request):
-            """Returns the 5 selectable female voice options with online/offline availability."""
+            """Returns the selectable female voice options with online/offline availability."""
             if not _auth(req):
                 return JSONResponse({"error": "Unauthorized"}, status_code=401)
             from core.character_manager import character_manager
             from providers.tts_system import list_voices
             char = character_manager.get_character()
             installed = list_voices(refresh=False)
-            female_personas = character_manager.get_female_voice_personas()
+            female_personas = character_manager.get_female_voice_personas(include_extended=True)
             return JSONResponse({
                 "ok": True,
                 "female_voices": female_personas,
@@ -2609,9 +2609,38 @@ class DashboardServer:
                 }
             })
 
+        @app.get("/api/voice/finevoice/status")
+        async def finevoice_status_ep(req: Request):
+            """Returns configuration, capability, pricing, and privacy status for FineVoice Madison integration."""
+            if not _auth(req):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            from core.finevoice_client import finevoice_client
+            return JSONResponse({
+                "ok": True,
+                "finevoice": finevoice_client.get_status()
+            })
+
+        @app.post("/api/voice/finevoice/convert")
+        async def finevoice_convert_ep(req: Request):
+            """Voice conversion endpoint requiring explicit per-session user consent."""
+            if not _auth(req):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            body = await req.json() if req.headers.get("content-length", "0") != "0" else {}
+            source_url = str(body.get("source_url", "")).strip()
+            consent_granted = bool(body.get("user_consent_granted", False))
+            from core.finevoice_client import finevoice_client
+            url, err = await finevoice_client.convert_voice_async(
+                source_audio_url=source_url,
+                voice="madison",
+                user_consent_granted=consent_granted
+            )
+            if err:
+                return JSONResponse({"ok": False, "error": err}, status_code=403 if "CONSENT" in err else 400)
+            return JSONResponse({"ok": True, "converted_audio_url": url})
+
         @app.post("/api/voice/select")
         async def select_voice_ep(req: Request):
-            """Persistently selects and activates one of the 5 female voice profiles."""
+            """Persistently selects and activates one of the female voice profiles."""
             if not _auth(req):
                 return JSONResponse({"error": "Unauthorized"}, status_code=401)
             body = await req.json() if req.headers.get("content-length", "0") != "0" else {}
@@ -2663,6 +2692,8 @@ class DashboardServer:
                 "voice_id": res.voice_used,
                 "sample_text": sample_text,
                 "is_offline": res.is_offline,
+                "is_fallback": getattr(res, "is_fallback", False),
+                "fallback_reason": getattr(res, "fallback_reason", None),
                 "duration_sec": res.duration_sec,
                 "sample_rate": res.sample_rate,
                 "persona": persona,

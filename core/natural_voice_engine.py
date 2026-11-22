@@ -84,6 +84,8 @@ class AudioChunkResult:
     sample_rate: int = 24000
     voice_used: str = "SWARA_HINDI"
     is_offline: bool = False
+    is_fallback: bool = False
+    fallback_reason: Optional[str] = None
     timing_segments: List[Dict[str, Any]] = field(default_factory=list)
 
 
@@ -257,7 +259,81 @@ class NaturalVoiceEngine:
             except Exception as e:
                 logger.error(f"SAPI5 synthesis error: {e}")
 
-        # ── 2. Neural EdgeTTS with tuned prosody ──────────────────────────────
+        # ── 2. FineVoice Cloud API for MADISON_FINEVOICE ──────────────────────
+        if voice_id == "MADISON_FINEVOICE" or str(sys_voice).startswith("finevoice:"):
+            from core.finevoice_client import finevoice_client
+            if finevoice_client.is_configured():
+                try:
+                    raw_audio, err = await finevoice_client.synthesize_speech_async(normalized, voice="madison")
+                    if raw_audio and len(raw_audio) > 100:
+                        wav_bytes, dur, sr = self._convert_mp3_to_wav(raw_audio, target_sr=24000)
+                        return AudioChunkResult(
+                            audio_bytes_wav=wav_bytes,
+                            duration_sec=dur,
+                            sample_rate=sr,
+                            voice_used="MADISON_FINEVOICE",
+                            is_offline=False,
+                            is_fallback=False
+                        )
+                    logger.warning(f"FineVoice synthesis notice ({err}). Engaging high-fidelity neural fallback.")
+                except Exception as fe:
+                    logger.warning(f"FineVoice request failed ({fe}). Engaging neural fallback.")
+            else:
+                logger.info("FineVoice API key not configured. Using high-fidelity neural fallback (Ava).")
+
+            # Fallback path for Madison:
+            # If text contains Devanagari, fall back to Swara Hindi neural; otherwise Ava US English neural
+            fallback_voice = "hi-IN-SwaraNeural" if _DEVANAGARI_RE.search(normalized) else "en-US-AvaNeural"
+            fallback_tag = "FINEVOICE_NEURAL_FALLBACK_SWARA" if _DEVANAGARI_RE.search(normalized) else "FINEVOICE_NEURAL_FALLBACK_AVA"
+            try:
+                comm = edge_tts.Communicate(
+                    text=normalized,
+                    voice=fallback_voice,
+                    pitch=pitch_delta,
+                    rate=rate_delta
+                )
+                mp3_buf = bytearray()
+                async for chunk in comm.stream():
+                    if chunk["type"] == "audio":
+                        mp3_buf.extend(chunk["data"])
+                if len(mp3_buf) > 100:
+                    wav_bytes, dur, sr = self._convert_mp3_to_wav(bytes(mp3_buf), target_sr=24000)
+                    return AudioChunkResult(
+                        audio_bytes_wav=wav_bytes,
+                        duration_sec=dur,
+                        sample_rate=sr,
+                        voice_used="MADISON_FINEVOICE",
+                        is_offline=False,
+                        is_fallback=True,
+                        fallback_reason=fallback_tag
+                    )
+            except Exception as fb_err:
+                logger.warning(f"Neural fallback for Madison unavailable ({fb_err}). Dropping to local SAPI5.")
+
+            # SAPI5 local fallback for Madison
+            try:
+                wav_bytes, dur, sr = self._synthesize_sapi5(normalized)
+                return AudioChunkResult(
+                    audio_bytes_wav=wav_bytes,
+                    duration_sec=dur,
+                    sample_rate=sr,
+                    voice_used="MADISON_FINEVOICE",
+                    is_offline=True,
+                    is_fallback=True,
+                    fallback_reason="FINEVOICE_OFFLINE_FALLBACK_SAPI5"
+                )
+            except Exception as s_err:
+                logger.error(f"SAPI5 fallback failed for Madison: {s_err}")
+                return AudioChunkResult(
+                    audio_bytes_wav=b"",
+                    duration_sec=0.0,
+                    voice_used="MADISON_FINEVOICE",
+                    is_offline=True,
+                    is_fallback=True,
+                    fallback_reason="FINEVOICE_SYNTHESIS_FAILED"
+                )
+
+        # ── 3. Neural EdgeTTS with tuned prosody ──────────────────────────────
         try:
             # Apply emotion-specific pitch/rate offsets from CharacterManager if available
             emo_state = character_manager.get_emotion_state(emotion)

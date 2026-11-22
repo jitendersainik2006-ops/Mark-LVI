@@ -14,7 +14,7 @@
 ## 🌟 KEY CAPABILITIES & FEATURES
 
 ### 1. Natural Conversational Voice & Real-Time Barge-In
-- **5 Verified Female Voice Personas:** Default **Swara (Warm Hindi & Hinglish Neural)**, **Neerja (Fluent Indian English Neural)**, **Ava (Modern US English Neural)**, **Sonia (Polished British English Neural)**, and **Zira (Local Offline Windows SAPI5)**.
+- **6 Verified Female Voice Personas:** Default **Swara (Warm Hindi & Hinglish Neural)**, **Neerja (Fluent Indian English Neural)**, **Ava (Modern US English Neural)**, **Sonia (Polished British English Neural)**, **Zira (Local Offline Windows SAPI5)**, and **Madison (FineVoice Expressive English - Cloud Direct TTS & Conversion)**.
 - **Client-Side Speech Barge-In:** Immediate audio stream cancellation the millisecond the user begins speaking, delivering fluid human-like turn-taking.
 - **Phonetic Pronunciation Dictionary:** Rules in `config/pronunciation_rules.json` guarantee precise phonetics for Indian names, greetings, and technical terminology across Hindi, Hinglish, and English.
 - **Listening Modes:** 4 switchable modes: **Hands-Free**, **Wake-Word ("Hey Jarvis")**, **Push-to-Talk**, and **Privacy Mute**.
@@ -55,9 +55,9 @@
 
 | Package | Format | Size | SHA-256 Checksum |
 | :--- | :--- | :--- | :--- |
-| **Windows Installer** | [.exe (Setup)](https://github.com/jitendersainik2006-ops/Mark-LVI/releases/download/v56.1.0/JARVIS_Mark_LVI_Setup.exe) | 2.96 MB | `872eca91561791801d71b28af04653f7eae6f4f86a7bf2db819973bff38157cd` |
-| **Portable Package** | [.zip (Standalone)](https://github.com/jitendersainik2006-ops/Mark-LVI/releases/download/v56.1.0/JARVIS_Mark_LVI_Windows_x64_Portable.zip) | 1.27 MB | `d6ea9a354c18df7feb0d489b5cd039ee304cbe0c3a9576c9c7886bd294d24a79` |
-| **Package Manifest** | [.txt (Manifest)](https://github.com/jitendersainik2006-ops/Mark-LVI/releases/download/v56.1.0/SHA256_MANIFEST.txt) | 22.6 KB | `fd62afb83317e0d87c13a19b741a3edb2a9c146610567ac83f4d20673fa2465c` |
+| **Windows Installer** | [.exe (Setup)](https://github.com/jitendersainik2006-ops/Mark-LVI/releases/download/v56.1.0/JARVIS_Mark_LVI_Setup.exe) | 2.96 MB | `eb0ac97df372c44b502b7589526a5ace56ee79552d20e6ad639e7c328508fa64` |
+| **Portable Package** | [.zip (Standalone)](https://github.com/jitendersainik2006-ops/Mark-LVI/releases/download/v56.1.0/JARVIS_Mark_LVI_Windows_x64_Portable.zip) | 1.28 MB | `e7f5495a8114dd85a464a4b97a1d0ba84cc91689441a29e26d732e62c70ae560` |
+| **Package Manifest** | [.txt (Manifest)](https://github.com/jitendersainik2006-ops/Mark-LVI/releases/download/v56.1.0/SHA256_MANIFEST.txt) | 22.8 KB | `8ce22e756935375ba78033576ed39647a030c8d82f302c5163c64c72687d5985` |
 
 ---
 

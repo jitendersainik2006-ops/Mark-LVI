@@ -398,6 +398,27 @@ class CharacterManager:
             "sample_text": "System online. I am Zira, operating locally on your Windows machine with zero external network access.",
             "offline_fallback": "Microsoft Zira Desktop",
         },
+        {
+            "id": "MADISON_FINEVOICE",
+            "name": "Madison (FineVoice Expressive English - Cloud)",
+            "label": "Madison",
+            "gender": "Female",
+            "lang": "en-US",
+            "supported_languages": ["English", "Hinglish"],
+            "system_voice": "finevoice:madison",
+            "is_neural": True,
+            "is_offline": False,
+            "is_cloud_api": True,
+            "provider": "FineVoice",
+            "voice_model": "madison",
+            "supported_modes": ["Direct TTS", "Voice Conversion"],
+            "description": "Expressive American English AI voice model by FineVoice (FineShare). Supports direct Text-to-Speech and speech-to-speech voice conversion.",
+            "sample_text": "Hello! I am Madison, powered by FineVoice. It is a pleasure to assist you with your day.",
+            "offline_fallback": "Microsoft Zira Desktop",
+            "neural_fallback": "Ava (en-US-AvaNeural)",
+            "requires_api_key": True,
+            "api_key_name": "finevoice_api_key",
+        },
         # ── Legacy Personas (Retained for Test & Persona Compatibility) ───────
         {
             "id": "MADHUR_HINDI",
@@ -548,9 +569,16 @@ class CharacterManager:
         return p
 
     @classmethod
-    def get_female_voice_personas(cls) -> List[Dict[str, Any]]:
-        """Returns the 5 selectable female voice profiles."""
-        return cls.VOICE_PERSONAS[:5]
+    def get_female_voice_personas(cls, include_extended: bool = False) -> List[Dict[str, Any]]:
+        """Returns the selectable female voice profiles. Returns 5 core profiles by default for backward compatibility."""
+        if not include_extended:
+            return cls.VOICE_PERSONAS[:5]
+        return cls.VOICE_PERSONAS[:6]
+
+    @classmethod
+    def get_all_female_voice_personas(cls) -> List[Dict[str, Any]]:
+        """Returns all 6 registered female voice personas including FineVoice Madison."""
+        return cls.VOICE_PERSONAS[:6]
 
     @classmethod
     def get_voice_persona(cls, voice_id: str) -> Optional[Dict[str, Any]]:
