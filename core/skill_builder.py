@@ -287,8 +287,10 @@ class SkillBuilder:
         proposal = self._proposals.get(proposal_id)
         skill_id = proposal.id if proposal else proposal_id
 
+        found = False
         skill_file = GENERATED_DIR / f"{skill_id}.py"
         if skill_file.exists():
+            found = True
             bak_file = GENERATED_DIR / f"{skill_id}.bak"
             try:
                 skill_file.rename(bak_file)
@@ -298,13 +300,23 @@ class SkillBuilder:
         try:
             from core.skill_router import skill_router
             if skill_id in skill_router._skills:
+                found = True
                 del skill_router._skills[skill_id]
         except Exception:
             pass
 
         if proposal:
+            found = True
             proposal.status = "rolled_back"
             self._save_proposal(proposal)
+
+        if not found:
+            return {
+                "ok": False,
+                "error": f"Skill or proposal '{skill_id}' not found.",
+                "skill_id": skill_id
+            }
+
         return {
             "ok": True,
             "skill_id": skill_id,

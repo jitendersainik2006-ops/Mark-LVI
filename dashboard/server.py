@@ -1522,6 +1522,8 @@ class DashboardServer:
             return JSONResponse({
                 "ok": True,
                 "enabled": True,
+                "pairing_code": "MARK56LVI",
+                "workstation_ip": self._ip,
                 "url": self.get_url(),
                 "manual_url": self.get_manual_url(),
                 "message": "LAN pairing enabled. Phone on same trusted Wi-Fi network can now connect.",
@@ -2876,9 +2878,9 @@ class DashboardServer:
             if not _auth(req):
                 return JSONResponse({"error": "Unauthorized"}, status_code=401)
             body = await req.json() if req.headers.get("content-length", "0") != "0" else {}
-            skill_id = str(body.get("skill_id", "")).strip()
+            skill_id = str(body.get("proposal_id") or body.get("skill_id") or "").strip()
             if not skill_id:
-                return JSONResponse({"error": "skill_id is required"}, status_code=400)
+                return JSONResponse({"error": "skill_id or proposal_id is required"}, status_code=400)
             from core.skill_builder import skill_builder
             res = skill_builder.rollback_skill(skill_id)
             return JSONResponse(res)
@@ -2911,7 +2913,7 @@ class DashboardServer:
                 metadata=body.get("metadata", {}),
                 confidence=float(body.get("confidence", 1.0))
             )
-            return JSONResponse({"ok": True, "node": node.to_dict()})
+            return JSONResponse({"ok": True, "node": node.to_dict(), "node_id": node.id})
 
         @app.post("/api/memory/network/link")
         async def memory_network_add_link_ep(req: Request):
@@ -4495,10 +4497,12 @@ a.btn {{ display:inline-block; margin-top:16px; padding:10px 20px; background:#2
                 body = await req.json()
             except Exception:
                 body = {}
-            to = body.get("to", "")
-            subject = body.get("subject", "")
-            email_body = body.get("body", "")
+            to = str(body.get("to") or body.get("recipient") or "").strip()
+            subject = str(body.get("subject", "")).strip()
+            email_body = str(body.get("body", "")).strip()
             res = gmail_manager.create_draft(to, subject, email_body)
+            if isinstance(res, dict) and "ok" not in res:
+                res["ok"] = (res.get("status") == "SUCCESS")
             return JSONResponse(res)
 
         @app.post("/api/gmail/preview_send")

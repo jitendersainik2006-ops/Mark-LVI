@@ -151,28 +151,37 @@ class MemoryNetwork:
 
     def add_node(
         self,
-        arg1: str,
-        arg2: str,
-        arg3: str,
+        arg1: Optional[str] = None,
+        arg2: Optional[str] = None,
+        arg3: Optional[str] = None,
         source: str = "operator",
         confidence: float = 1.0,
         related_ids: Optional[List[str]] = None,
         tags: Optional[List[str]] = None,
         metadata: Optional[dict] = None,
+        *,
+        label: Optional[str] = None,
+        category: Optional[str] = None,
+        content: Optional[str] = None,
     ) -> MemoryNode:
-        # Detect if called as (category, key, value) or (label/key, category, content/value)
-        if arg1.lower().strip() in CATEGORIES:
+        # Detect if called with kwargs (label, category, content) or positional
+        if label is not None or content is not None:
+            key_clean = str(label or arg1 or "unlabeled").strip()
+            val_clean = str(content or arg2 or "").strip()
+            chosen_cat = (category or arg3 or "learned").lower().strip()
+            cat = chosen_cat if chosen_cat in CATEGORIES else "learned"
+        elif arg1 and arg1.lower().strip() in CATEGORIES:
             cat = arg1.lower().strip()
             key_clean = str(arg2).strip()
             val_clean = str(arg3).strip()
-        elif arg2.lower().strip() in CATEGORIES:
+        elif arg2 and arg2.lower().strip() in CATEGORIES:
             key_clean = str(arg1).strip()
             cat = arg2.lower().strip()
             val_clean = str(arg3).strip()
         else:
             cat = "learned"
-            key_clean = str(arg1).strip()
-            val_clean = str(arg3 or arg2).strip()
+            key_clean = str(arg1 or "unlabeled").strip()
+            val_clean = str(arg3 or arg2 or "").strip()
 
         node_id = f"mem_{cat}_{re.sub(r'[^a-zA-Z0-9_]', '_', key_clean)}_{int(time.time()*1000)%100000}"
 

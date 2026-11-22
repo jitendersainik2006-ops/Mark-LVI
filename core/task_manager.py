@@ -419,14 +419,14 @@ class TaskManager:
         self._notify("task_paused", task)
         return True
 
-    def resume_task(self, task_id: str) -> bool:
+    def resume_task(self, task_id: str, approved: bool = False) -> bool:
         """Resume a paused task safely."""
         with self._lock:
             task = self._tasks.get(task_id)
             if not task or task.status != "paused":
                 return False
             # Consequential safety: if action is high risk, require explicit approval
-            if task.action_name in HIGH_RISK_ACTIONS:
+            if task.action_name in HIGH_RISK_ACTIONS and not approved:
                 task.status = "waiting_for_approval"
             else:
                 task.status = "queued"
