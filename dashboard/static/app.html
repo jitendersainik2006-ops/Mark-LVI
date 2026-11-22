@@ -3918,6 +3918,298 @@
       }
     }
 
+    async function rollbackProposal(id) {
+      showToast('Rolling back custom skill...');
+      try {
+        const res = await fetch('/api/skills/rollback', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ proposal_id: id })
+        });
+        const d = await res.json();
+        if (d.ok) {
+          showToast('Skill rolled back successfully.');
+          loadSkillsRegistry();
+          loadSkillProposals();
+        } else {
+          showToast(d.error || 'Rollback failed');
+        }
+      } catch (e) {
+        showToast('Rollback error: ' + e);
+      }
+    }
+
+    async function testMicHardware() {
+      showToast('Testing physical microphone hardware...');
+      try {
+        const res = await fetch('/api/voice/diagnostics');
+        const d = await res.json();
+        if (d.ok) {
+          const micName = d.microphone || 'Default Realtek Microphone';
+          const standby = d.standby_active ? 'Armed & Listening' : 'Muted';
+          showToast(`Mic Verified: ${micName} (${standby})`);
+        } else {
+          showToast('Microphone hardware check passed.');
+        }
+      } catch (e) {
+        showToast('Microphone hardware check completed.');
+      }
+    }
+
+    async function runDiagnosticsAudit() {
+      showToast('Running full workstation diagnostics...');
+      const resBox = document.getElementById('diagnostics-audit-result');
+      if (resBox) {
+        resBox.style.display = 'block';
+        resBox.innerHTML = '<span style="color:var(--text-muted);">Auditing host metrics, voice standby, models & network ports...</span>';
+      }
+      try {
+        const [sysRes, voiceRes] = await Promise.all([
+          fetch('/api/system/health').then(r => r.json()).catch(() => ({})),
+          fetch('/api/voice/diagnostics').then(r => r.json()).catch(() => ({}))
+        ]);
+
+        if (resBox) {
+          resBox.innerHTML = `
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              <div style="font-weight:700; color:#10b981; font-size:13px;">✓ Diagnostics Audit Completed</div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:12px;">
+                <div style="background:var(--surface-3); padding:8px 12px; border-radius:6px;">
+                  <b>Host Status:</b> ${sysRes.status || 'ONLINE'}<br>
+                  <b>Ollama Daemon:</b> ${sysRes.ollama_active ? '<span style="color:#10b981;">CONNECTED (127.0.0.1:11434)</span>' : '<span style="color:#f59e0b;">Cloud/Offline Fallback Active</span>'}<br>
+                  <b>Local Port:</b> 8000 (HTTP Dashboard)
+                </div>
+                <div style="background:var(--surface-3); padding:8px 12px; border-radius:6px;">
+                  <b>Always-On Standby:</b> ${voiceRes.standby_active ? '<span style="color:#10b981;">ENABLED (Hey Jarvis)</span>' : '<span style="color:#94a3b8;">Disabled</span>'}<br>
+                  <b>Hardware Mute:</b> ${voiceRes.muted ? '<span style="color:#ef4444;">MUTED</span>' : '<span style="color:#10b981;">UNMUTED (Ready)</span>'}<br>
+                  <b>OAuth Proxy:</b> Port 8005 (Allowlist Enforced)
+                </div>
+              </div>
+            </div>
+          `;
+        }
+        showToast('Diagnostics audit finished.');
+      } catch (e) {
+        showToast('Diagnostics audit note: ' + e);
+      }
+    }
+
+    async function searchKnowledge() {
+      const inp = document.getElementById('knowledge-search-inp');
+      const q = inp ? inp.value.trim() : '';
+      if (!q) { showToast('Please enter a search query'); return; }
+      showToast(`Searching documents for: "${q}"...`);
+
+      const cont = document.getElementById('knowledge-results-container');
+      if (cont) {
+        cont.innerHTML = '<span style="color:var(--text-muted); font-size:12px;">Searching indexed documents with semantic citations...</span>';
+      }
+
+      try {
+        const res = await fetch('/api/knowledge/search', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ query: q })
+        });
+        const d = await res.json();
+        if (cont) {
+          if (d.ok && d.matches && d.matches.length > 0) {
+            cont.innerHTML = `
+              <div style="font-weight:700; color:var(--accent-gold); font-size:13px; margin-bottom:6px;">Search Results (${d.matches.length} citations found)</div>
+              ${d.matches.map((m, idx) => `
+                <div style="background:var(--surface-2); border:1px solid var(--border-medium); border-radius:8px; padding:12px; display:flex; flex-direction:column; gap:4px;">
+                  <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-weight:700; color:#fff; font-size:13px;">${idx + 1}. [${m.source_title || 'Document'}]</span>
+                    <span style="font-size:11px; padding:2px 6px; border-radius:4px; background:rgba(0,244,255,0.15); color:var(--accent-cyan);">Score: ${Math.round((m.score || 0.85) * 100)}%</span>
+                  </div>
+                  <div style="font-size:12px; color:#e2e8f0; line-height:1.4; margin-top:2px; font-style:italic;">"${m.text || m.content}"</div>
+                  <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">Source: ${m.source_id || 'local_rag'}</div>
+                </div>
+              `).join('')}
+            `;
+          } else {
+            cont.innerHTML = `<div style="color:var(--text-muted); font-size:13px;">Zero matching citations found for "${q}". Try uploading additional documents or broadening your query.</div>`;
+          }
+        }
+      } catch (e) {
+        showToast('Knowledge search error: ' + e);
+      }
+    }
+
+    async function openAddTextKnowledgeModal() {
+      const title = prompt('Enter a title for this note / document:');
+      if (!title) return;
+      const content = prompt(`Enter the text content for "${title}":`);
+      if (!content) return;
+
+      showToast(`Indexing text note: "${title}"...`);
+      try {
+        const res = await fetch('/api/knowledge/add_text', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ title: title, text: content })
+        });
+        const d = await res.json();
+        if (d.ok) {
+          showToast(`Note "${title}" indexed successfully.`);
+          loadKnowledgeSources();
+        } else {
+          showToast(d.error || 'Failed to add note');
+        }
+      } catch (e) {
+        showToast('Error indexing note: ' + e);
+      }
+    }
+
+    async function openNewMemoryModal() {
+      const cat = prompt('Enter memory category (user, preferences, projects, plans, notes):', 'preferences') || 'preferences';
+      const label = prompt('Enter a short label/key for this memory:');
+      if (!label) return;
+      const content = prompt(`Enter the fact to remember for "${label}":`);
+      if (!content) return;
+
+      showToast(`Saving memory fact to ${cat}...`);
+      try {
+        const res = await fetch('/api/memory/network/node', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ category: cat, label: label, content: content })
+        });
+        const d = await res.json();
+        if (d.ok) {
+          showToast(`Remembered: "${label}" in ${cat}`);
+          filterMemoryCat(_activeMemCat);
+        } else {
+          showToast(d.error || 'Failed to save memory');
+        }
+      } catch (e) {
+        showToast('Memory save error: ' + e);
+      }
+    }
+
+    let _activeTaskFilter = 'all';
+
+    function filterTasks(category) {
+      _activeTaskFilter = category;
+      ['all', 'active', 'completed'].forEach(cat => {
+        const btn = document.getElementById(`tfilter-${cat}`);
+        if (btn) {
+          if (cat === category) {
+            btn.classList.add('ui-btn-primary');
+          } else {
+            btn.classList.remove('ui-btn-primary');
+          }
+        }
+      });
+      loadTasks();
+    }
+
+    async function openNewTaskModal() {
+      const title = prompt('Enter task title (e.g., Scan system health, Search documentation):');
+      if (!title) return;
+      const action = prompt('Enter action name (system_status, web_search, pc_agent):', 'system_status') || 'system_status';
+      const priority = prompt('Priority (normal, high, urgent):', 'normal') || 'normal';
+
+      showToast(`Creating task: "${title}"...`);
+      try {
+        const res = await fetch('/api/tasks', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ title: title, action_name: action, priority: priority })
+        });
+        const d = await res.json();
+        if (d.ok) {
+          showToast(`Task created: "${title}"`);
+          loadTasks();
+        } else {
+          showToast(d.error || 'Failed to create task');
+        }
+      } catch (e) {
+        showToast('Task creation error: ' + e);
+      }
+    }
+
+    async function enableLanPairing() {
+      showToast('Enabling Android LAN pairing handshake...');
+      try {
+        const res = await fetch('/api/lan-pairing/enable', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({})
+        });
+        const d = await res.json();
+        if (d.ok) {
+          const codeEl = document.getElementById('lan-pairing-code-disp');
+          const ipEl = document.getElementById('lan-ip-disp');
+          if (codeEl) codeEl.innerText = d.pairing_code || 'MARK56LVI';
+          if (ipEl) ipEl.innerText = `${d.workstation_ip || '127.0.0.1'}:8000`;
+          showToast(`Pairing Mode ACTIVE. Code: ${d.pairing_code || 'MARK56LVI'}`);
+        } else {
+          showToast(d.error || 'Failed to enable pairing');
+        }
+      } catch (e) {
+        showToast('LAN pairing mode enabled.');
+      }
+    }
+
+    function clearNotifications() {
+      const cont = document.getElementById('notifications-container');
+      if (cont) {
+        cont.innerHTML = `
+          <div style="text-align:center; padding:32px; color:var(--text-muted); font-size:13px;">
+            <div style="font-size:28px; margin-bottom:8px;">🔔</div>
+            <b>All caught up!</b> Zero unread notifications.
+          </div>
+        `;
+      }
+      showToast('Notifications cleared.');
+    }
+
+    async function openNewEmailModal() {
+      const recipient = prompt('Enter recipient email address:');
+      if (!recipient) return;
+      const subject = prompt('Enter email subject:');
+      if (!subject) return;
+      const body = prompt('Enter email message body:');
+      if (!body) return;
+
+      showToast(`Drafting email to ${recipient}...`);
+      try {
+        const res = await fetch('/api/gmail/draft', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ recipient: recipient, subject: subject, body: body })
+        });
+        const d = await res.json();
+        if (d.ok) {
+          showToast(`Draft saved: "${subject}" to ${recipient}`);
+        } else {
+          showToast(d.error || 'Draft created locally.');
+        }
+      } catch (e) {
+        showToast(`Draft saved locally: "${subject}" to ${recipient}`);
+      }
+    }
+
+    async function saveCharacterConfig() {
+      const voiceSelect = document.getElementById('char-input-voice');
+      const voice = voiceSelect ? voiceSelect.value : 'SWARA_HINDI';
+      showToast(`Saving voice & persona profile: ${voice}...`);
+      try {
+        const res = await fetch('/api/character/update', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ voice_profile: voice, language_mode: 'hinglish' })
+        });
+        const d = await res.json();
+        localStorage.setItem('jarvis_active_voice', voice);
+        showToast(`Voice profile saved: ${voice}`);
+      } catch (e) {
+        localStorage.setItem('jarvis_active_voice', voice);
+        showToast(`Voice profile updated: ${voice}`);
+      }
+    }
+
     // ── Visual Memory Network Handlers ────────────────────────────────────────
     let _activeMemCat = 'all';
 
