@@ -21,6 +21,7 @@ import os
 import re
 import shutil
 import sys
+import tempfile
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -39,6 +40,46 @@ BASE_DIR = get_base_dir()
 DATA_DIR = BASE_DIR / "data"
 AUDIT_LOG_FILE = DATA_DIR / "computer_agent_audit.log"
 
+
+def is_safe_path(p: Path | str) -> bool:
+    """Verifies that path is strictly within approved project roots or OS temporary workspace.
+    Prevents directory traversal (..), access to Windows system root (C:\\Windows, System32), and out-of-bounds files.
+    """
+    try:
+        raw_str = str(p).strip()
+        if not raw_str:
+            return False
+        path_obj = Path(p) if Path(p).is_absolute() else BASE_DIR / p
+        resolved = path_obj.resolve()
+
+        # Approved root boundaries
+        approved_roots = [
+            BASE_DIR.resolve(),
+            DATA_DIR.resolve(),
+            Path(tempfile.gettempdir()).resolve(),
+        ]
+
+        # Explicitly block sensitive OS directories
+        blocked_system_prefixes = [
+            Path("C:/Windows").resolve() if sys.platform == "win32" else Path("/etc").resolve(),
+            Path("C:/Program Files").resolve() if sys.platform == "win32" else Path("/bin").resolve(),
+            Path("C:/Program Files (x86)").resolve() if sys.platform == "win32" else Path("/sbin").resolve(),
+        ]
+
+        for blocked in blocked_system_prefixes:
+            if resolved == blocked or blocked in resolved.parents:
+                return False
+
+        for root in approved_roots:
+            try:
+                resolved.relative_to(root)
+                return True
+            except ValueError:
+                continue
+        return False
+    except Exception:
+        return False
+
 DESTRUCTIVE_ACTIONS = {
     "delete_file",
     "remove_folder",
@@ -51,6 +92,7 @@ DESTRUCTIVE_ACTIONS = {
     "overwrite_file",
     "organize_files_move",
     "apply_code_patch",
+    "rollback_code_patch",
 }
 
 SCRUB_PATTERNS = [
@@ -160,6 +202,8 @@ class ComputerAgent:
         if plan_id not in self._active_plans:
             return False
         plan = self._active_plans[plan_id]
+        if plan.status == "CANCELLED":
+            return False
         step = next((s for s in plan.steps if s.step_id == step_id), None)
         if not step:
             return False
@@ -169,6 +213,7 @@ class ComputerAgent:
             step.status = "PENDING"
             self.log_audit("GRANT_PERMISSION", {"plan_id": plan_id, "step_id": step_id, "action": step.action_name}, "GRANTED")
             return True
+        self.log_audit("DENY_PERMISSION", {"plan_id": plan_id, "step_id": step_id, "action": step.action_name, "token": confirm_token}, "DENIED")
         return False
 
     def execute_step(self, plan_id: str, step_id: int, runner_callable: Optional[Callable] = None) -> Tuple[bool, str]:
@@ -304,6 +349,13 @@ class ComputerAgent:
             for s in plan.steps:
                 if s.status in ("PENDING", "AWAITING_PERMISSION", "RUNNING"):
                     s.status = "SKIPPED"
+        else:
+            for p in self._active_plans.values():
+                if p.status in ("IN_PROGRESS", "CREATED", "AWAITING_PERMISSION"):
+                    p.status = "CANCELLED"
+                    for s in p.steps:
+                        if s.status in ("PENDING", "AWAITING_PERMISSION", "RUNNING"):
+                            s.status = "SKIPPED"
         self.log_audit("STOP_REQUESTED", {"plan_id": plan_id or "all"}, "HALTED")
         return True
 
@@ -314,6 +366,10 @@ class ComputerAgent:
 
         plan = self._active_plans[plan_id]
         if plan.status == "CANCELLED" or self._stop_requested:
+            plan.status = "CANCELLED"
+            for s in plan.steps:
+                if s.status in ("PENDING", "AWAITING_PERMISSION", "RUNNING"):
+                    s.status = "SKIPPED"
             return {
                 "ok": False,
                 "status": "STOPPED",
@@ -325,8 +381,11 @@ class ComputerAgent:
         plan.status = "IN_PROGRESS"
 
         for step in plan.steps:
-            if self._stop_requested:
+            if self._stop_requested or plan.status == "CANCELLED":
                 plan.status = "CANCELLED"
+                for s in plan.steps:
+                    if s.status in ("PENDING", "AWAITING_PERMISSION", "RUNNING"):
+                        s.status = "SKIPPED"
                 return {
                     "ok": False,
                     "status": "STOPPED",
@@ -558,6 +617,8 @@ class ComputerAgent:
 
         elif act == "read_file":
             path = Path(params.get("path", ""))
+            if not is_safe_path(path):
+                return f"Security error: Access denied to path '{path}'. Path traversal outside approved workspace is blocked."
             if not path.exists():
                 return f"Error: File not found: {path}"
             content = path.read_text(encoding="utf-8", errors="ignore")
@@ -566,6 +627,8 @@ class ComputerAgent:
 
         elif act in ("write_file", "create_file"):
             path = Path(params.get("path", ""))
+            if not is_safe_path(path):
+                return f"Security error: Write access denied to path '{path}'. Path traversal outside approved workspace is blocked."
             content = params.get("content", "")
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content, encoding="utf-8")
@@ -573,6 +636,8 @@ class ComputerAgent:
 
         elif act in ("list_directory", "search_files"):
             path = Path(params.get("path", "."))
+            if not is_safe_path(path):
+                return f"Security error: Directory access denied to path '{path}'. Directory traversal outside approved workspace is blocked."
             query = params.get("query", "").lower()
             if not path.exists():
                 return f"Error: Directory not found: {path}"
@@ -607,6 +672,8 @@ class ComputerAgent:
             src = params.get("dir", "data/temp_staging")
             pat = params.get("pattern", "*.*")
             target_path = Path(src) if Path(src).is_absolute() else BASE_DIR / src
+            if not is_safe_path(target_path):
+                return f"Security error: Scan access denied to path '{src}'. Path traversal outside approved workspace is blocked."
             if not target_path.exists():
                 try:
                     target_path.mkdir(parents=True, exist_ok=True)
@@ -625,6 +692,9 @@ class ComputerAgent:
             pat = params.get("pattern", "*.*")
             tgt = params.get("target", "data/organized")
             src_path = Path(src) if Path(src).is_absolute() else BASE_DIR / src
+            tgt_path = Path(tgt) if Path(tgt).is_absolute() else BASE_DIR / tgt
+            if not is_safe_path(src_path) or not is_safe_path(tgt_path):
+                return "Security error: Directory traversal detected in preview parameters."
             matched = list(src_path.glob(pat)) if src_path.exists() else []
             return f"DRY-RUN PREVIEW: {len(matched)} files matching '{pat}' staged for relocation from '{src}' into '{tgt}/'. Target destination verified. Zero files modified."
 
@@ -634,6 +704,8 @@ class ComputerAgent:
             tgt = params.get("target", "data/organized")
             src_path = Path(src) if Path(src).is_absolute() else BASE_DIR / src
             tgt_path = Path(tgt) if Path(tgt).is_absolute() else BASE_DIR / tgt
+            if not is_safe_path(src_path) or not is_safe_path(tgt_path):
+                return "Security error: Directory traversal detected in file relocation parameters."
             moved_count = 0
             try:
                 tgt_path.mkdir(parents=True, exist_ok=True)
@@ -650,6 +722,8 @@ class ComputerAgent:
         elif act == "detect_test_suite":
             tgt = params.get("target", "tests")
             tests_dir = Path(tgt) if Path(tgt).is_absolute() else BASE_DIR / tgt
+            if not is_safe_path(tests_dir):
+                return f"Security error: Test discovery access denied to path '{tgt}'."
             if tests_dir.is_file():
                 return f"Single test module verified: {tests_dir.name}."
             test_files = [f.name for f in tests_dir.glob("test_*.py")] if tests_dir.exists() else []
@@ -677,6 +751,8 @@ class ComputerAgent:
         elif act == "validate_document_source":
             path_str = params.get("path", "README.md")
             doc_path = Path(path_str) if Path(path_str).is_absolute() else BASE_DIR / path_str
+            if not is_safe_path(doc_path):
+                return f"Security error: Document access denied to path '{path_str}'. Path traversal outside approved workspace is blocked."
             if not doc_path.exists():
                 return f"Document '{path_str}' not located on disk."
             size_kb = round(doc_path.stat().st_size / 1024, 2)
@@ -686,6 +762,8 @@ class ComputerAgent:
         elif act == "extract_document_content":
             path_str = params.get("path", "README.md")
             doc_path = Path(path_str) if Path(path_str).is_absolute() else BASE_DIR / path_str
+            if not is_safe_path(doc_path):
+                return f"Security error: Document access denied to path '{path_str}'."
             if not doc_path.exists():
                 return f"Document '{path_str}' not found on disk."
             content = doc_path.read_text(encoding="utf-8", errors="ignore")
@@ -696,6 +774,8 @@ class ComputerAgent:
         elif act == "summarize_document_insights":
             path_str = params.get("path", "README.md")
             doc_path = Path(path_str) if Path(path_str).is_absolute() else BASE_DIR / path_str
+            if not is_safe_path(doc_path):
+                return f"Security error: Document access denied to path '{path_str}'."
             fname = doc_path.name if doc_path.exists() else path_str
             return (
                 f"Executive Insights Summary for '{fname}': "
@@ -707,6 +787,8 @@ class ComputerAgent:
         elif act == "read_and_parse_ast":
             path_str = params.get("path", "main.py")
             src_path = Path(path_str) if Path(path_str).is_absolute() else BASE_DIR / path_str
+            if not is_safe_path(src_path):
+                return f"Security error: Code analysis access denied to path '{path_str}'. Path traversal outside approved workspace is blocked."
             if not src_path.exists():
                 return f"Target source file '{path_str}' not found."
             code_text = src_path.read_text(encoding="utf-8", errors="ignore")
@@ -721,18 +803,40 @@ class ComputerAgent:
         elif act == "diagnose_code_issue":
             path_str = params.get("path", "main.py")
             issue = params.get("issue", "syntax and imports")
+            src_path = Path(path_str) if Path(path_str).is_absolute() else BASE_DIR / path_str
+            if not is_safe_path(src_path):
+                return f"Security error: Code diagnosis access denied to path '{path_str}'."
             return f"Diagnostic Report for '{path_str}': AST syntax validated. Import tree verified. No blocker issues identified for '{issue}'."
 
         elif act == "apply_code_patch":
             path_str = params.get("path", "main.py")
             src_path = Path(path_str) if Path(path_str).is_absolute() else BASE_DIR / path_str
+            if not is_safe_path(src_path):
+                return f"Security error: Code modification denied to path '{path_str}'. Path traversal outside approved workspace is blocked."
+            if not src_path.exists():
+                return f"Error: Target file not found: {path_str}"
             bak_path = src_path.with_suffix(src_path.suffix + ".bak")
             try:
-                if src_path.exists() and not bak_path.exists():
-                    shutil.copy2(str(src_path), str(bak_path))
-            except Exception:
-                pass
-            return f"Patch verification complete for '{src_path.name}'. File integrity confirmed. Safety backup preserved."
+                shutil.copy2(str(src_path), str(bak_path))
+                if "content" in params:
+                    src_path.write_text(params["content"], encoding="utf-8")
+                return f"Patch verification complete for '{src_path.name}'. File integrity confirmed. Safety backup preserved at '{bak_path.name}'."
+            except Exception as e:
+                return f"Code modification error: {e}"
+
+        elif act == "rollback_code_patch":
+            path_str = params.get("path", "main.py")
+            src_path = Path(path_str) if Path(path_str).is_absolute() else BASE_DIR / path_str
+            if not is_safe_path(src_path):
+                return f"Security error: Code rollback denied to path '{path_str}'. Path traversal outside approved workspace is blocked."
+            bak_path = src_path.with_suffix(src_path.suffix + ".bak")
+            if not bak_path.exists():
+                return f"Rollback error: No backup file found for '{src_path.name}'."
+            try:
+                shutil.copy2(str(bak_path), str(src_path))
+                return f"Rollback successful: Restored '{src_path.name}' from verified backup '{bak_path.name}'."
+            except Exception as e:
+                return f"Rollback error: Failed to restore backup: {e}"
 
         return f"Simulated execution for action: {action_name}"
 

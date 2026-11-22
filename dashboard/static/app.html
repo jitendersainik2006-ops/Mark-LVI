@@ -1660,6 +1660,37 @@
 
   <!-- ── APPLICATION CONTROLLER JAVASCRIPT ── -->
   <script>
+    // ── Safe DOM Rendering & Sanitization Helpers ───────────────────────────
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function escapeAttr(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+
+    function safeUrl(url) {
+      if (!url) return '#';
+      const u = String(url).trim();
+      const lower = u.toLowerCase();
+      if (lower.startsWith('javascript:') || lower.startsWith('data:') || lower.startsWith('vbscript:')) {
+        return '#';
+      }
+      return escapeAttr(u);
+    }
+
     // Global State & Configuration
     let currentView = 'home';
     let isListening = false;
@@ -3195,7 +3226,7 @@
       const b = document.createElement('div');
       b.className = `chat-bubble ${role}`;
       const asstLabel = (currentPersonality === 'FRIDAY') ? 'FRIDAY' : ((currentPersonality === 'ANALYST') ? 'ANALYST' : 'J.A.R.V.I.S.');
-      b.innerHTML = `<div style="font-size:10px; font-weight:800; margin-bottom:4px; text-transform:uppercase; color:${role==='assistant'?'var(--accent-gold)':'var(--text-muted)'};">${role==='assistant'?asstLabel:'YOU'}</div><div>${text}</div>`;
+      b.innerHTML = `<div style="font-size:10px; font-weight:800; margin-bottom:4px; text-transform:uppercase; color:${role==='assistant'?'var(--accent-gold)':'var(--text-muted)'};">${escapeHtml(role==='assistant'?asstLabel:'YOU')}</div><div>${escapeHtml(text)}</div>`;
       feed.appendChild(b);
       feed.scrollTop = feed.scrollHeight;
     }
@@ -3624,11 +3655,11 @@
           <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
             <div>
               <div style="font-weight:700; color:#fbbf24; font-size:13px;">⚠️ Operator Confirmation Gate: Destructive Action</div>
-              <div style="font-size:12px; color:#e2e8f0; margin-top:2px;">Step ${data.step.step_id}: ${data.step.description} (${data.step.action_name})</div>
+              <div style="font-size:12px; color:#e2e8f0; margin-top:2px;">Step ${Number(data.step.step_id)}: ${escapeHtml(data.step.description)} (${escapeHtml(data.step.action_name)})</div>
             </div>
             <div style="display:flex; gap:8px;">
-              <button class="ui-btn" style="background:#10b981; color:#fff; border-color:#10b981; font-weight:700;" onclick="confirmPcAgentStep(${data.step.step_id}, true)">Authorize (CONFIRM)</button>
-              <button class="ui-btn ui-btn-danger" onclick="confirmPcAgentStep(${data.step.step_id}, false)">Deny / Stop</button>
+              <button class="ui-btn" style="background:#10b981; color:#fff; border-color:#10b981; font-weight:700;" onclick="confirmPcAgentStep(${Number(data.step.step_id)}, true)">Authorize (CONFIRM)</button>
+              <button class="ui-btn ui-btn-danger" onclick="confirmPcAgentStep(${Number(data.step.step_id)}, false)">Deny / Stop</button>
             </div>
           </div>
         `;
@@ -3651,13 +3682,13 @@
               <div style="display:flex; justify-content:space-between; align-items:center;">
                 <div style="display:flex; align-items:center; gap:8px;">
                   <span style="font-size:14px;">${icon}</span>
-                  <span style="font-weight:700; color:var(--text-bright);">Step ${s.step_id}: ${s.description}</span>
-                  <span style="font-size:11px; color:var(--text-muted); font-family:monospace;">[${s.action_name}]</span>
+                  <span style="font-weight:700; color:var(--text-bright);">Step ${Number(s.step_id)}: ${escapeHtml(s.description)}</span>
+                  <span style="font-size:11px; color:var(--text-muted); font-family:monospace;">[${escapeHtml(s.action_name)}]</span>
                 </div>
-                <span style="font-size:11px; padding:3px 8px; border-radius:4px; background:${badgeColor}22; color:${badgeColor}; font-weight:700;">${s.status}</span>
+                <span style="font-size:11px; padding:3px 8px; border-radius:4px; background:${badgeColor}22; color:${badgeColor}; font-weight:700;">${escapeHtml(s.status)}</span>
               </div>
-              ${s.observed_result ? `<div style="font-size:11px; color:var(--text-subtle); background:rgba(0,0,0,0.25); padding:6px 10px; border-radius:4px; font-family:monospace;"><b>Observed:</b> ${s.observed_result}</div>` : ''}
-              ${s.error ? `<div style="font-size:11px; color:#ef4444; background:rgba(239,68,68,0.1); padding:6px 10px; border-radius:4px;"><b>Error:</b> ${s.error}</div>` : ''}
+              ${s.observed_result ? `<div style="font-size:11px; color:var(--text-subtle); background:rgba(0,0,0,0.25); padding:6px 10px; border-radius:4px; font-family:monospace;"><b>Observed:</b> ${escapeHtml(s.observed_result)}</div>` : ''}
+              ${s.error ? `<div style="font-size:11px; color:#ef4444; background:rgba(239,68,68,0.1); padding:6px 10px; border-radius:4px;"><b>Error:</b> ${escapeHtml(s.error)}</div>` : ''}
             </div>
           `;
         }).join('');
@@ -3945,56 +3976,174 @@
 
     async function testMicHardware() {
       showToast('Testing physical microphone hardware...');
+      const micStatusEl = document.getElementById('mic-hardware-status');
       try {
         const res = await fetch('/api/voice/diagnostics');
+        if (!res.ok) {
+          showToast(`[FAIL] Mic diagnostics failed (HTTP ${res.status})`);
+          if (micStatusEl) {
+            micStatusEl.style.display = 'inline-block';
+            micStatusEl.style.color = '#ef4444';
+            micStatusEl.textContent = `FAIL (HTTP ${res.status})`;
+          }
+          return;
+        }
         const d = await res.json();
-        if (d.ok) {
-          const micName = d.microphone || 'Default Realtek Microphone';
-          const standby = d.standby_active ? 'Armed & Listening' : 'Muted';
-          showToast(`Mic Verified: ${micName} (${standby})`);
+        if (!d.ok || !d.diagnostics || !d.diagnostics.audio_devices) {
+          showToast('[FAIL] Invalid audio diagnostics response');
+          if (micStatusEl) {
+            micStatusEl.style.display = 'inline-block';
+            micStatusEl.style.color = '#ef4444';
+            micStatusEl.textContent = 'FAIL (Invalid response)';
+          }
+          return;
+        }
+
+        const audio = d.diagnostics.audio_devices;
+        const inDevs = audio.input_devices || [];
+        const defIn = audio.default_input;
+
+        if (audio.status === 'OK' && inDevs.length > 0) {
+          const micName = defIn || (inDevs[0] ? inDevs[0].name : 'Default Microphone');
+          showToast(`[PASS] Verified Mic: ${micName} (${inDevs.length} device(s) active)`);
+          if (micStatusEl) {
+            micStatusEl.style.display = 'inline-block';
+            micStatusEl.style.color = '#10b981';
+            micStatusEl.textContent = `PASS (${micName})`;
+          }
+        } else if (inDevs.length === 0 || audio.status === 'WARN') {
+          const err = audio.error || 'No microphone devices detected';
+          showToast(`[FAIL] Microphone check failed: ${err}`);
+          if (micStatusEl) {
+            micStatusEl.style.display = 'inline-block';
+            micStatusEl.style.color = '#f59e0b';
+            micStatusEl.textContent = `FAIL (${err})`;
+          }
         } else {
-          showToast('Microphone hardware check passed.');
+          showToast(`[FAIL] Audio subsystem error: ${audio.error || audio.status}`);
+          if (micStatusEl) {
+            micStatusEl.style.display = 'inline-block';
+            micStatusEl.style.color = '#ef4444';
+            micStatusEl.textContent = `FAIL (${audio.error || audio.status})`;
+          }
         }
       } catch (e) {
-        showToast('Microphone hardware check completed.');
+        showToast(`[NOT VERIFIED] Mic check error: ${e.message || e}`);
+        if (micStatusEl) {
+          micStatusEl.style.display = 'inline-block';
+          micStatusEl.style.color = '#94a3b8';
+          micStatusEl.textContent = `NOT VERIFIED (${e.message || 'Network error'})`;
+        }
       }
     }
 
     async function runDiagnosticsAudit() {
-      showToast('Running full workstation diagnostics...');
+      showToast('Running live workstation diagnostics audit...');
       const resBox = document.getElementById('diagnostics-audit-result');
       if (resBox) {
         resBox.style.display = 'block';
-        resBox.innerHTML = '<span style="color:var(--text-muted);">Auditing host metrics, voice standby, models & network ports...</span>';
+        resBox.innerHTML = '<span style="color:var(--text-muted); font-size:12px;">Querying host metrics, voice standby, models, and network ports...</span>';
       }
+
+      let sysHealth = null, hostMetrics = null, voiceDiag = null, alwaysOn = null, tunnel = null;
+
       try {
-        const [sysRes, voiceRes] = await Promise.all([
-          fetch('/api/system/health').then(r => r.json()).catch(() => ({})),
-          fetch('/api/voice/diagnostics').then(r => r.json()).catch(() => ({}))
+        const [rHealth, rStatus, rVoice, rAo, rTunnel] = await Promise.allSettled([
+          fetch('/api/system/health').then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)),
+          fetch('/api/system/status').then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)),
+          fetch('/api/voice/diagnostics').then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)),
+          fetch('/api/voice/always_on').then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)),
+          fetch('/api/instagram/oauth/tunnel/status').then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`))
         ]);
+
+        if (rHealth.status === 'fulfilled') sysHealth = rHealth.value;
+        if (rStatus.status === 'fulfilled') hostMetrics = rStatus.value;
+        if (rVoice.status === 'fulfilled') voiceDiag = rVoice.value;
+        if (rAo.status === 'fulfilled') alwaysOn = rAo.value;
+        if (rTunnel.status === 'fulfilled') tunnel = rTunnel.value;
+
+        // Determine real statuses - NEVER assume ONLINE or HARDCODE!
+        const hostOnline = sysHealth && sysHealth.status === 'healthy';
+        const hostStatusText = hostOnline 
+          ? `<span style="color:#10b981;">HEALTHY (v${escapeHtml(sysHealth.version || '56.1.0')})</span>` 
+          : '<span style="color:#ef4444;">UNKNOWN / UNREACHABLE</span>';
+
+        // Check Ollama status from real voice diagnostics
+        let ollamaStatusText = '<span style="color:#94a3b8;">UNKNOWN (Not queried)</span>';
+        if (voiceDiag && voiceDiag.diagnostics && voiceDiag.diagnostics.llm) {
+          const llm = voiceDiag.diagnostics.llm;
+          if (llm.status === 'OK') {
+            ollamaStatusText = `<span style="color:#10b981;">CONNECTED (${escapeHtml(llm.model_loaded || 'qwen2.5:3b')})</span>`;
+          } else if (llm.status === 'WARN' || llm.status === 'ERROR') {
+            ollamaStatusText = `<span style="color:#f59e0b;">OFFLINE / FALLBACK (${escapeHtml(llm.error || 'No Ollama daemon')})</span>`;
+          } else {
+            ollamaStatusText = `<span style="color:#94a3b8;">UNKNOWN (${escapeHtml(llm.status)})</span>`;
+          }
+        } else {
+          ollamaStatusText = '<span style="color:#ef4444;">UNKNOWN (Service check failed)</span>';
+        }
+
+        // Active port from browser environment
+        const currentPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+
+        // Always-On Voice Standby
+        let aoText = '<span style="color:#94a3b8;">UNKNOWN</span>';
+        if (alwaysOn && alwaysOn.ok) {
+          aoText = alwaysOn.always_on 
+            ? `<span style="color:#10b981;">ENABLED (Wake Word: ${escapeHtml((alwaysOn.standby_phrases || ['Hey Jarvis']).join(', '))})</span>`
+            : '<span style="color:#94a3b8;">DISABLED (Push-to-Talk only)</span>';
+        } else {
+          aoText = '<span style="color:#ef4444;">UNKNOWN (Voice config unavailable)</span>';
+        }
+
+        // Microphone Hardware State
+        let micText = '<span style="color:#94a3b8;">UNKNOWN</span>';
+        if (voiceDiag && voiceDiag.diagnostics && voiceDiag.diagnostics.audio_devices) {
+          const ad = voiceDiag.diagnostics.audio_devices;
+          if (ad.status === 'OK' && ad.input_devices && ad.input_devices.length > 0) {
+            micText = `<span style="color:#10b981;">READY (${escapeHtml(ad.default_input || ad.input_devices[0].name)})</span>`;
+          } else {
+            micText = `<span style="color:#f59e0b;">DEGRADED (${escapeHtml(ad.error || 'No mic detected')})</span>`;
+          }
+        }
+
+        // OAuth Proxy Status
+        let proxyText = '<span style="color:#94a3b8;">UNKNOWN</span>';
+        if (tunnel && tunnel.ok) {
+          proxyText = tunnel.active 
+            ? `<span style="color:#10b981;">ACTIVE (${escapeHtml(tunnel.url || 'Port 8005')})</span>`
+            : '<span style="color:#94a3b8;">STANDBY (Inactive until OAuth flow)</span>';
+        } else {
+          proxyText = '<span style="color:#94a3b8;">STANDBY / UNCONFIGURED</span>';
+        }
 
         if (resBox) {
           resBox.innerHTML = `
             <div style="display:flex; flex-direction:column; gap:8px;">
-              <div style="font-weight:700; color:#10b981; font-size:13px;">✓ Diagnostics Audit Completed</div>
+              <div style="font-weight:700; color:${hostOnline ? '#10b981' : '#f59e0b'}; font-size:13px;">
+                ${hostOnline ? '✓ Live Workstation Diagnostics Audit Completed' : '⚠️ Diagnostics Completed with Warnings'}
+              </div>
               <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:12px;">
                 <div style="background:var(--surface-3); padding:8px 12px; border-radius:6px;">
-                  <b>Host Status:</b> ${sysRes.status || 'ONLINE'}<br>
-                  <b>Ollama Daemon:</b> ${sysRes.ollama_active ? '<span style="color:#10b981;">CONNECTED (127.0.0.1:11434)</span>' : '<span style="color:#f59e0b;">Cloud/Offline Fallback Active</span>'}<br>
-                  <b>Local Port:</b> 8000 (HTTP Dashboard)
+                  <b>Host Backend:</b> ${hostStatusText}<br>
+                  <b>Ollama LLM:</b> ${ollamaStatusText}<br>
+                  <b>Dashboard Port:</b> ${escapeHtml(currentPort)} (${escapeHtml(window.location.protocol.replace(':', '').toUpperCase())})
                 </div>
                 <div style="background:var(--surface-3); padding:8px 12px; border-radius:6px;">
-                  <b>Always-On Standby:</b> ${voiceRes.standby_active ? '<span style="color:#10b981;">ENABLED (Hey Jarvis)</span>' : '<span style="color:#94a3b8;">Disabled</span>'}<br>
-                  <b>Hardware Mute:</b> ${voiceRes.muted ? '<span style="color:#ef4444;">MUTED</span>' : '<span style="color:#10b981;">UNMUTED (Ready)</span>'}<br>
-                  <b>OAuth Proxy:</b> Port 8005 (Allowlist Enforced)
+                  <b>Always-On Standby:</b> ${aoText}<br>
+                  <b>Microphone Device:</b> ${micText}<br>
+                  <b>OAuth Proxy Tunnel:</b> ${proxyText}
                 </div>
               </div>
             </div>
           `;
         }
-        showToast('Diagnostics audit finished.');
+        showToast('Diagnostics audit complete.');
       } catch (e) {
-        showToast('Diagnostics audit note: ' + e);
+        if (resBox) {
+          resBox.innerHTML = `<div style="color:#ef4444; font-size:12px;">Diagnostics audit failed: ${escapeHtml(e.message || String(e))}</div>`;
+        }
+        showToast(`Diagnostics audit error: ${e.message || e}`);
       }
     }
 
@@ -4019,23 +4168,28 @@
         if (cont) {
           if (d.ok && d.matches && d.matches.length > 0) {
             cont.innerHTML = `
-              <div style="font-weight:700; color:var(--accent-gold); font-size:13px; margin-bottom:6px;">Search Results (${d.matches.length} citations found)</div>
+              <div style="font-weight:700; color:var(--accent-gold); font-size:13px; margin-bottom:6px;">
+                Search Results (${Number(d.matches.length)} citations found for &quot;${escapeHtml(q)}&quot;)
+              </div>
               ${d.matches.map((m, idx) => `
                 <div style="background:var(--surface-2); border:1px solid var(--border-medium); border-radius:8px; padding:12px; display:flex; flex-direction:column; gap:4px;">
                   <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span style="font-weight:700; color:#fff; font-size:13px;">${idx + 1}. [${m.source_title || 'Document'}]</span>
-                    <span style="font-size:11px; padding:2px 6px; border-radius:4px; background:rgba(0,244,255,0.15); color:var(--accent-cyan);">Score: ${Math.round((m.score || 0.85) * 100)}%</span>
+                    <span style="font-weight:700; color:#fff; font-size:13px;">${Number(idx + 1)}. [${escapeHtml(m.source_title || 'Document')}]</span>
+                    <span style="font-size:11px; padding:2px 6px; border-radius:4px; background:rgba(0,244,255,0.15); color:var(--accent-cyan);">Score: ${Math.round(Number(m.score || 0.85) * 100)}%</span>
                   </div>
-                  <div style="font-size:12px; color:#e2e8f0; line-height:1.4; margin-top:2px; font-style:italic;">"${m.text || m.content}"</div>
-                  <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">Source: ${m.source_id || 'local_rag'}</div>
+                  <div style="font-size:12px; color:#e2e8f0; line-height:1.4; margin-top:2px; font-style:italic;">&quot;${escapeHtml(m.text || m.content || '')}&quot;</div>
+                  <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">Source: ${escapeHtml(m.source_id || 'local_rag')}</div>
                 </div>
               `).join('')}
             `;
           } else {
-            cont.innerHTML = `<div style="color:var(--text-muted); font-size:13px;">Zero matching citations found for "${q}". Try uploading additional documents or broadening your query.</div>`;
+            cont.innerHTML = `<div style="color:var(--text-muted); font-size:13px;">Zero matching citations found for &quot;${escapeHtml(q)}&quot;. Try uploading additional documents or broadening your query.</div>`;
           }
         }
       } catch (e) {
+        if (cont) {
+          cont.innerHTML = `<div style="color:#ef4444; font-size:12px;">Search error: ${escapeHtml(e.message || String(e))}</div>`;
+        }
         showToast('Knowledge search error: ' + e);
       }
     }
@@ -4219,7 +4373,7 @@
 
     async function filterMemoryCat(cat) {
       _activeMemCat = cat;
-      const url = cat === 'all' ? '/api/memory/network' : `/api/memory/network?category=${cat}`;
+      const url = cat === 'all' ? '/api/memory/network' : `/api/memory/network?category=${encodeURIComponent(cat)}`;
       try {
         const res = await fetch(url);
         const d = await res.json();
@@ -4229,12 +4383,12 @@
           c.innerHTML = nodes.map(n => `
             <div style="background:var(--surface-2); padding:10px 14px; border-radius:8px; border:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center;">
               <div>
-                <span style="font-size:10px; font-weight:800; padding:2px 6px; border-radius:4px; background:var(--accent-gold-soft); color:var(--accent-gold);">${n.category.toUpperCase()}</span>
-                <b style="font-size:13px; margin-left:6px;">${n.label}</b>
-                <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${n.content}</div>
-                ${n.links && n.links.length > 0 ? `<div style="font-size:10px; color:var(--accent-cyan); margin-top:2px;">🔗 Linked: ${n.links.map(l => l.target).join(', ')}</div>` : ''}
+                <span style="font-size:10px; font-weight:800; padding:2px 6px; border-radius:4px; background:var(--accent-gold-soft); color:var(--accent-gold);">${escapeHtml(n.category || '').toUpperCase()}</span>
+                <b style="font-size:13px; margin-left:6px;">${escapeHtml(n.label)}</b>
+                <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${escapeHtml(n.content)}</div>
+                ${n.links && n.links.length > 0 ? `<div style="font-size:10px; color:var(--accent-cyan); margin-top:2px;">🔗 Linked: ${escapeHtml(n.links.map(l => l.target).join(', '))}</div>` : ''}
               </div>
-              <button class="ui-btn ui-btn-danger" style="padding:2px 6px; font-size:10px;" onclick="deleteMemoryNode('${n.id}')">Delete</button>
+              <button class="ui-btn ui-btn-danger" style="padding:2px 6px; font-size:10px;" onclick="deleteMemoryNode('${escapeAttr(n.id)}')">Delete</button>
             </div>
           `).join('') || 'No memory nodes in this category.';
         }
@@ -4243,7 +4397,7 @@
 
     async function deleteMemoryNode(id) {
       if (!confirm('Delete this memory node?')) return;
-      await fetch(`/api/memory/network/node/${id}`, { method: 'DELETE' });
+      await fetch(`/api/memory/network/node/${encodeURIComponent(id)}`, { method: 'DELETE' });
       showToast('Memory node removed');
       filterMemoryCat(_activeMemCat);
     }
@@ -4264,20 +4418,20 @@
             <div style="background:var(--surface-2); padding:12px; border-radius:10px; border:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; gap:12px;">
               <div style="flex:1;">
                 <div style="display:flex; align-items:center; gap:8px;">
-                  <span style="font-weight:700; font-size:13px;">${t.title || t.name}</span>
-                  <span style="font-size:10px; font-weight:700; padding:2px 8px; border-radius:4px; background:${t.status==='completed'?'rgba(16,185,129,0.15)':(t.status==='paused'?'rgba(245,158,11,0.15)':'rgba(212,168,83,0.15)')}; color:${t.status==='completed'?'#10b981':(t.status==='paused'?'#f59e0b':'var(--accent-gold)')};">${(t.status||'READY').toUpperCase()}</span>
+                  <span style="font-weight:700; font-size:13px;">${escapeHtml(t.title || t.name)}</span>
+                  <span style="font-size:10px; font-weight:700; padding:2px 8px; border-radius:4px; background:${t.status==='completed'?'rgba(16,185,129,0.15)':(t.status==='paused'?'rgba(245,158,11,0.15)':'rgba(212,168,83,0.15)')}; color:${t.status==='completed'?'#10b981':(t.status==='paused'?'#f59e0b':'var(--accent-gold)')};">${escapeHtml((t.status||'READY').toUpperCase())}</span>
                 </div>
-                <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${t.description || 'No description'}</div>
+                <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${escapeHtml(t.description || 'No description')}</div>
                 <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">
-                  Checkpoint: <b>${t.checkpoint_step || 'initial'}</b> • Retries: <b>${t.retry_count || 0}/${t.max_retries || 3}</b>
+                  Checkpoint: <b>${escapeHtml(t.checkpoint_step || 'initial')}</b> • Retries: <b>${Number(t.retry_count || 0)}/${Number(t.max_retries || 3)}</b>
                 </div>
               </div>
               <div style="display:flex; gap:6px;">
-                ${t.status === 'waiting_for_approval' ? `<button class="ui-btn ui-btn-primary" style="padding:4px 8px; font-size:11px;" onclick="approveTask('${t.id}')">Approve</button>` : ''}
-                ${(t.status === 'in_progress' || t.status === 'pending') ? `<button class="ui-btn" style="padding:4px 8px; font-size:11px;" onclick="pauseTask('${t.id}')">Pause</button>` : ''}
-                ${t.status === 'paused' ? `<button class="ui-btn ui-btn-primary" style="padding:4px 8px; font-size:11px;" onclick="resumeTask('${t.id}')">Resume</button>` : ''}
-                ${t.status === 'failed' ? `<button class="ui-btn" style="padding:4px 8px; font-size:11px;" onclick="retryTask('${t.id}')">Retry</button>` : ''}
-                <button class="ui-btn" style="padding:4px 8px; font-size:11px;" onclick="showTaskHistory('${t.id}')">History</button>
+                ${t.status === 'waiting_for_approval' ? `<button class="ui-btn ui-btn-primary" style="padding:4px 8px; font-size:11px;" onclick="approveTask('${escapeAttr(t.id)}')">Approve</button>` : ''}
+                ${(t.status === 'in_progress' || t.status === 'pending') ? `<button class="ui-btn" style="padding:4px 8px; font-size:11px;" onclick="pauseTask('${escapeAttr(t.id)}')">Pause</button>` : ''}
+                ${t.status === 'paused' ? `<button class="ui-btn ui-btn-primary" style="padding:4px 8px; font-size:11px;" onclick="resumeTask('${escapeAttr(t.id)}')">Resume</button>` : ''}
+                ${t.status === 'failed' ? `<button class="ui-btn" style="padding:4px 8px; font-size:11px;" onclick="retryTask('${escapeAttr(t.id)}')">Retry</button>` : ''}
+                <button class="ui-btn" style="padding:4px 8px; font-size:11px;" onclick="showTaskHistory('${escapeAttr(t.id)}')">History</button>
               </div>
             </div>
           `).join('') || 'No tasks found.';
@@ -4286,13 +4440,13 @@
     }
 
     async function pauseTask(id) {
-      await fetch(`/api/tasks/${id}/pause`, { method: 'POST' });
+      await fetch(`/api/tasks/${encodeURIComponent(id)}/pause`, { method: 'POST' });
       showToast('Task paused at checkpoint');
       loadTasks();
     }
 
     async function resumeTask(id) {
-      await fetch(`/api/tasks/${id}/resume`, {
+      await fetch(`/api/tasks/${encodeURIComponent(id)}/resume`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ approved: true })
@@ -4302,19 +4456,19 @@
     }
 
     async function approveTask(id) {
-      await fetch(`/api/tasks/${id}/approve`, { method: 'POST' });
+      await fetch(`/api/tasks/${encodeURIComponent(id)}/approve`, { method: 'POST' });
       showToast('Task approved');
       loadTasks();
     }
 
     async function retryTask(id) {
-      await fetch(`/api/tasks/${id}/retry`, { method: 'POST' });
+      await fetch(`/api/tasks/${encodeURIComponent(id)}/retry`, { method: 'POST' });
       showToast('Retrying task');
       loadTasks();
     }
 
     async function showTaskHistory(id) {
-      const res = await fetch(`/api/tasks/${id}/history`);
+      const res = await fetch(`/api/tasks/${encodeURIComponent(id)}/history`);
       const d = await res.json();
       if (d.ok && d.history) {
         alert(`Task Checkpoint History (${d.history.length} records):\n\n` + 
@@ -4333,10 +4487,10 @@
         const d = await res.json();
         const f = document.getElementById('reels-feed');
         if (f && d.reels) {
-          f.innerHTML = `<div style="font-size:13px; font-weight:700; margin-bottom:10px;">Preserved Entries (${d.reels.length} total)</div>` + 
+          f.innerHTML = `<div style="font-size:13px; font-weight:700; margin-bottom:10px;">Preserved Entries (${Number(d.reels.length)} total)</div>` + 
             d.reels.slice(0, 10).map(r => `
               <div style="background:var(--surface-2); padding:8px 12px; border-radius:6px; border:1px solid var(--border-subtle); margin-bottom:6px; font-size:12px;">
-                <b>#${r.reel_id || r.id}</b> • ${r.title || 'Reel Entry'} • Status: <span style="color:#f59e0b;">${r.status}</span>
+                <b>#${escapeHtml(r.reel_id || r.id)}</b> • ${escapeHtml(r.title || 'Reel Entry')} • Status: <span style="color:#f59e0b;">${escapeHtml(r.status)}</span>
               </div>
             `).join('');
         }
@@ -4351,8 +4505,8 @@
       if (c && d.ok && d.data && d.data.results) {
         c.innerHTML = d.data.results.map(f => `
           <div style="background:var(--surface-2); padding:8px 12px; border-radius:6px; border:1px solid var(--border-subtle); display:flex; justify-content:space-between; font-size:12px;">
-            <span>📄 <b>${f.name}</b> <span style="color:var(--text-muted); font-size:10px;">(${f.path})</span></span>
-            <span style="color:var(--accent-gold); font-size:11px;">${Math.round(f.size_bytes/1024)} KB</span>
+            <span>📄 <b>${escapeHtml(f.name)}</b> <span style="color:var(--text-muted); font-size:10px;">(${escapeHtml(f.path)})</span></span>
+            <span style="color:var(--accent-gold); font-size:11px;">${Math.round(Number(f.size_bytes || 0)/1024)} KB</span>
           </div>
         `).join('') || 'No matching files found.';
       }
