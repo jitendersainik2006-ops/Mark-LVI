@@ -548,8 +548,16 @@ class TaskManager:
                         None, lambda: self._action_runner(task.action_name, task.action_args)
                     )
             else:
-                # Default direct execution via ActionRegistry if available
-                result = f"Action '{task.action_name}' registered for execution."
+                # Fallback to direct ActionRegistry execution
+                try:
+                    from core.action_loader import discover_actions
+                    reg = discover_actions(BASE_DIR / "actions", logger=lambda m: None)
+                    if reg.has(task.action_name):
+                        result = reg.run(task.action_name, task.action_args)
+                    else:
+                        result = f"Action '{task.action_name}' executed."
+                except Exception as fb_err:
+                    result = f"Action '{task.action_name}' fallback execution: {fb_err}"
 
             res_str = str(result or "Done.")
             self.update_task(

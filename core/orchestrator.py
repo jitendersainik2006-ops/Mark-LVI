@@ -301,6 +301,8 @@ class AgentOrchestrator:
         logger.info(f"[Orchestrator] Created plan {plan_id} with {len(steps)} steps for objective: '{obj_clean}'")
         return plan
 
+    create_plan = plan_objective
+
     # ── Plan Execution ─────────────────────────────────────────────────────────
 
     def execute_plan(self, plan_id: str) -> Dict[str, Any]:
@@ -401,3 +403,4 @@ class AgentOrchestrator:
 
 # Global singleton
 agent_orchestrator = AgentOrchestrator.get_instance()
+orchestrator = agent_orchestrator

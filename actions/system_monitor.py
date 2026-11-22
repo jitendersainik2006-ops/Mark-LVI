@@ -198,3 +198,41 @@ class SystemMonitor:
             self._record("gpu")
 
         return " ".join(alerts) if alerts else None
+
+
+def system_status_handler(parameters: dict = None, **kwargs) -> str:
+    """Invoked by ActionRegistry when system_status is requested."""
+    metrics = get_system_status()
+    cpu = metrics.get("cpu_percent", 0.0)
+    ram_pct = metrics.get("ram_percent", 0.0)
+    ram_used = metrics.get("ram_used_gb", 0.0)
+    ram_total = metrics.get("ram_total_gb", 0.0)
+    uptime = metrics.get("uptime", "N/A")
+    procs = metrics.get("process_count", 0)
+    temp = metrics.get("cpu_temp_c")
+    temp_str = f", CPU Temp: {temp}°C" if temp is not None else ""
+    return (
+        f"System Status: CPU: {cpu:.1f}%, RAM: {ram_used:.1f}/{ram_total:.1f} GB ({ram_pct:.1f}%), "
+        f"Uptime: {uptime}, Active Processes: {procs}{temp_str}."
+    )
+
+
+# ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
+TOOL = {
+    "name": "system_status",
+    "description": (
+        "Snapshot of current system telemetry and hardware metrics including CPU usage, "
+        "RAM consumption, system uptime, and running processes. Call whenever the user asks for "
+        "system status, performance, resource usage, or telemetry."
+    ),
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {
+            "detail": {
+                "type": "STRING",
+                "description": "Optional detail level: summary (default) or full."
+            }
+        }
+    },
+    "handler": system_status_handler,
+}
