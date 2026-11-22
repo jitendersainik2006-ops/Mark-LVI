@@ -383,6 +383,14 @@
           <span class="item-icon">👑</span>
           <span>Admin & Backups</span>
         </a>
+        <a class="sidebar-item" onclick="switchView('notifications')" id="nav-notifications">
+          <span class="item-icon">🔔</span>
+          <span>Notifications</span>
+        </a>
+        <a class="sidebar-item" onclick="switchView('diagnostics')" id="nav-diagnostics">
+          <span class="item-icon">🩺</span>
+          <span>System Diagnostics</span>
+        </a>
       </nav>
 
       <!-- Bottom User / Host Profile -->
@@ -1994,6 +2002,8 @@
       if (viewId === 'whatsapp') loadWhatsAppDashboard();
       if (viewId === 'reminders') loadSmartRemindersList();
       if (viewId === 'pc_control') loadPcAgentAudit();
+      if (viewId === 'notifications') loadNotifications();
+      if (viewId === 'diagnostics') runDiagnosticsAudit();
     }
 
     // ── Theme Manager ────────────────────────────────────────────────────────
@@ -3285,11 +3295,12 @@
 
       if (heroBadge) {
         heroBadge.innerText = state;
-        if (state === 'STANDBY') { heroBadge.style.color = '#38bdf8'; }
+        if (state === 'IDLE' || state === 'STANDBY') { heroBadge.style.color = '#00f4ff'; }
         else if (state === 'WAKE_DETECTED') { heroBadge.style.color = '#00f4ff'; }
         else if (state === 'LISTENING') { heroBadge.style.color = '#10b981'; }
         else if (state === 'THINKING') { heroBadge.style.color = '#fbbf24'; }
         else if (state === 'SPEAKING') { heroBadge.style.color = '#d4a853'; }
+        else if (state === 'WORKING') { heroBadge.style.color = '#10b981'; }
         else if (state === 'MUTED') { heroBadge.style.color = '#ef4444'; }
         else if (state === 'ERROR') { heroBadge.style.color = '#ef4444'; }
         else { heroBadge.style.color = '#00f4ff'; }
@@ -3319,11 +3330,15 @@
           micPrompt.innerText = 'Speaking (Speak to interrupt)...';
           if (micIcon) micIcon.innerText = '🔊';
           if (micBtn) { micBtn.classList.remove('active-listening'); micBtn.classList.remove('mic-muted'); }
+        } else if (state === 'WORKING') {
+          micPrompt.innerText = 'Executing PC automation task... (Click STOP to halt)';
+          if (micIcon) micIcon.innerText = '⚡';
+          if (micBtn) { micBtn.classList.remove('active-listening'); micBtn.classList.remove('mic-muted'); }
         } else if (state === 'ERROR') {
           micPrompt.innerText = 'Voice Engine Error — Check Mic Permission';
           if (micIcon) micIcon.innerText = '⚠️';
           if (micBtn) { micBtn.classList.remove('active-listening'); micBtn.classList.remove('mic-muted'); }
-        } else { // STANDBY or IDLE
+        } else if (state === 'IDLE' || state === 'STANDBY') {
           if (window.alwaysOnVoiceActive) {
             micPrompt.innerText = 'Always-On Voice Active — Say "Hey Jarvis"';
             if (micIcon) micIcon.innerText = '🎙️';
@@ -4311,7 +4326,7 @@
     }
 
     function clearNotifications() {
-      const cont = document.getElementById('notifications-container');
+      const cont = document.getElementById('notifications-list') || document.getElementById('notifications-container');
       if (cont) {
         cont.innerHTML = `
           <div style="text-align:center; padding:32px; color:var(--text-muted); font-size:13px;">
@@ -4321,6 +4336,36 @@
         `;
       }
       showToast('Notifications cleared.');
+    }
+
+    async function loadNotifications() {
+      const cont = document.getElementById('notifications-list') || document.getElementById('notifications-container');
+      if (!cont) return;
+      try {
+        const res = await fetch('/api/tasks');
+        const data = await res.json();
+        const tasks = data.tasks || [];
+        if (!tasks.length) {
+          cont.innerHTML = `
+            <div style="text-align:center; padding:32px; color:var(--text-muted); font-size:13px;">
+              <div style="font-size:28px; margin-bottom:8px;">🔔</div>
+              <b>All caught up!</b> Zero unread notifications.
+            </div>
+          `;
+          return;
+        }
+        cont.innerHTML = tasks.slice(0, 8).map(t => `
+          <div style="padding:10px 14px; background:var(--surface-2); border-radius:8px; border:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <div style="font-size:12px; font-weight:700; color:var(--accent-purple);">${escapeHtml(t.title)}</div>
+              <div style="font-size:11px; color:var(--text-secondary); margin-top:2px;">Status: ${escapeHtml(t.status)} • Priority: ${escapeHtml(t.priority)}</div>
+            </div>
+            <span class="item-badge" style="background:${t.status === 'completed' ? 'rgba(16,185,129,0.2)' : 'rgba(139,92,246,0.2)'}; color:${t.status === 'completed' ? '#10b981' : 'var(--accent-purple)'};">${escapeHtml(t.status)}</span>
+          </div>
+        `).join('');
+      } catch (e) {
+        console.warn('Error loading notifications:', e);
+      }
     }
 
     async function openNewEmailModal() {
