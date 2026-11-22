@@ -51,13 +51,13 @@
 
 ---
 
-## 💾 OFFICIAL DOWNLOADS & RELEASES (v56.1.0 Defect-Fixed Release)
+## 💾 OFFICIAL DOWNLOADS & RELEASES (v56.1.0 Master Release)
 
 | Package | Format | Size | SHA-256 Checksum |
 | :--- | :--- | :--- | :--- |
-| **Windows Installer** | [.exe (Setup)](https://github.com/jitendersainik2006-ops/Mark-LVI/releases/download/v56.1.0/JARVIS_Mark_LVI_Setup.exe) | 2.89 MB | `b174f6c9adb8ae02465a99b632e62a0ceef882d490b67d1ff6b3f3d99397e2ae` |
-| **Portable Package** | [.zip (Standalone)](https://github.com/jitendersainik2006-ops/Mark-LVI/releases/download/v56.1.0/JARVIS_Mark_LVI_Windows_x64_Portable.zip) | 1.16 MB | `0c5602c2c0334463fb3105f08f3e244c638c93ec82b90ef046350f500586cbbb` |
-| **Package Manifest** | [.txt (Manifest)](https://github.com/jitendersainik2006-ops/Mark-LVI/releases/download/v56.1.0/SHA256_MANIFEST.txt) | 21.0 KB | `6fbfeb765cc06d7a837c774a266168085b06490e2a7c527faafd7398e11a6f60` |
+| **Windows Installer** | [.exe (Setup)](https://github.com/jitendersainik2006-ops/Mark-LVI/releases/download/v56.1.0/JARVIS_Mark_LVI_Setup.exe) | 2.96 MB | `872eca91561791801d71b28af04653f7eae6f4f86a7bf2db819973bff38157cd` |
+| **Portable Package** | [.zip (Standalone)](https://github.com/jitendersainik2006-ops/Mark-LVI/releases/download/v56.1.0/JARVIS_Mark_LVI_Windows_x64_Portable.zip) | 1.27 MB | `d6ea9a354c18df7feb0d489b5cd039ee304cbe0c3a9576c9c7886bd294d24a79` |
+| **Package Manifest** | [.txt (Manifest)](https://github.com/jitendersainik2006-ops/Mark-LVI/releases/download/v56.1.0/SHA256_MANIFEST.txt) | 22.6 KB | `fd62afb83317e0d87c13a19b741a3edb2a9c146610567ac83f4d20673fa2465c` |
 
 ---
 
